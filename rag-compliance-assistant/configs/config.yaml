@@ -1,0 +1,13 @@
+chunking:
+  min_tokens: 40
+  max_tokens: 250
+
+embedding:
+  model_name: all-MiniLM-L6-v2
+
+retrieval:
+  k: 5
+
+generation:
+  model_name: Qwen/Qwen2.5-3B-Instruct
+  max_new_tokens: 300
