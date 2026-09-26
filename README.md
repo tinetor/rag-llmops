@@ -1,2 +1,4 @@
-# rag-llmops
-RAG LLMOps project with FastAPI, config, prompts, evaluation, and Docker setup.
+# RAG Compliance Assistant
+
+RAG pipeline over internal compliance training material.
+See DESIGN.md for architecture decisions and rationale.
