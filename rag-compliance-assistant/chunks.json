@@ -1,0 +1,42 @@
+[
+  {
+    "heading": "Anti-Corruption Policy",
+    "text": "This document establishes company guidelines for preventing corruption and bribery. It is prohibited to offer, promise, or authorize any payment, gift, or improper advantage to public or private agents in order to gain a business advantage. The company adopts a zero-tolerance policy and requires due diligence on third parties acting on its behalf before public authorities.",
+    "id": 0
+  },
+  {
+    "heading": "Gifts and Hospitality",
+    "text": "Corporate gifts up to $200 may be accepted without registration. Gifts above that value must be logged in the internal compliance system within 5 business days. Cash gifts or cash equivalents are prohibited in any amount. During active bidding or negotiation periods, no gifts may be accepted from involved counterparties.",
+    "id": 1
+  },
+  {
+    "heading": "Conflict of Interest",
+    "text": "A conflict of interest arises whenever personal, family, or financial interests could influence an employee's professional decisions. Every employee must declare annually, in the compliance system, any family or ownership relationships with suppliers, clients, or competitors. Failing to declare a known conflict is considered a serious violation of the code of conduct.",
+    "id": 2
+  },
+  {
+    "heading": "Whistleblowing Channel",
+    "text": "The company maintains a confidential, anonymous whistleblowing channel operated by an independent third party, available 24 hours a day. Reports can be made by any employee, client, or supplier. Any form of retaliation against a good-faith whistleblower is strictly prohibited. The maximum response time to the whistleblower is 10 business days.",
+    "id": 3
+  },
+  {
+    "heading": "Data Privacy",
+    "text": "Personal data processing must follow the principles of minimization and specific purpose set out in data protection regulation. New processing of sensitive data requires a Data Protection Impact Assessment (DPIA) pre-approved by the Data Protection Officer (DPO). Data subject requests (access, correction, deletion) must be fulfilled within 15 calendar days, under the DPO's responsibility.",
+    "id": 4
+  },
+  {
+    "heading": "Corporate Travel and Expenses",
+    "text": "Domestic business travel must be booked in economy class. International flights longer than 8 hours allow business class, subject to manager pre-approval. International trips require prior approval from senior leadership at least 10 days in advance. Expense reports must be submitted within 7 business days of return.",
+    "id": 5
+  },
+  {
+    "heading": "Third-Party and Supplier Relationships",
+    "text": "Every supplier must undergo integrity due diligence before being contracted, including sanctions and corruption background checks. Third-party contracts must include standard anti-corruption clauses. Suppliers classified as high risk undergo a compliance review every 12 months.",
+    "id": 6
+  },
+  {
+    "heading": "Mandatory Training and Sanctions",
+    "text": "Every employee must complete the annual compliance training within the deadline set by HR. Failure to complete training on time results in a block on access to corporate systems until resolved. Code of conduct violations may result in a warning, suspension, or termination for cause, depending on severity.",
+    "id": 7
+  }
+]

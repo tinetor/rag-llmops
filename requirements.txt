@@ -5,3 +5,6 @@ accelerate
 torch
 pyyaml
 pytest
+langchain-text-splitters
+llama-index-readers-file
+pypdf
