@@ -1,3 +1,0 @@
-langchain-text-splitters
-llama-index-readers-file
-pypdf
