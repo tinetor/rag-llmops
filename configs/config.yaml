@@ -1,2 +1,5 @@
 data:
   pdf_path: data/ai_act.pdf
+
+index:
+  persist_dir: storage
