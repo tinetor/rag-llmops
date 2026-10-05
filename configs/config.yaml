@@ -3,3 +3,6 @@ data:
 
 chunking:
   max_chars: 1500
+
+index:
+  persist_dir: storage

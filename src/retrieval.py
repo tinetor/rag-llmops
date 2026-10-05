@@ -13,12 +13,27 @@ def load_retriever(persist_dir: str = "storage", model_name: str = "sentence-tra
     return index.as_retriever(similarity_top_k=k)
 
 
+def retrieve(retriever, query: str) -> list[dict]:
+    results = retriever.retrieve(query)
+    return [
+        {
+            "text": r.text,
+            "page": r.node.metadata.get("page_label"),
+            "score": r.score,
+        }
+        for r in results
+    ]
+
+
 if __name__ == "__main__":
-    retriever = load_retriever()
+    from config import load_config
+
+    config = load_config()
+    retriever = load_retriever(persist_dir=config["index"]["persist_dir"])
 
     query = "What are the prohibited AI practices?"
-    results = retriever.retrieve(query)
+    results = retrieve(retriever, query)
 
     print(f"Query: {query}\n")
     for r in results:
-        print(f"[{r.score:.3f}] page {r.node.metadata.get('page_label')} | {r.text[:100]!r}")
+        print(f"[{r['score']:.3f}] page {r['page']} | {r['text'][:100]!r}")
