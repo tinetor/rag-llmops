@@ -1,34 +1,24 @@
-"""Loads a saved index + chunks and retrieves the top-k chunks for a query."""
-
-import json
-from pathlib import Path
-
-import faiss
-from sentence_transformers import SentenceTransformer
-
-from chunking import load_config
+from llama_index.core import StorageContext, load_index_from_storage
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+from llama_index.vector_stores.faiss import FaissVectorStore
 
 
-def load_retriever(config):
-    model = SentenceTransformer(config["embedding"]["model_name"])
-    index = faiss.read_index("rag_index.faiss")
-    chunks = json.loads(Path("chunks.json").read_text())
-    return model, index, chunks
+def load_retriever(persist_dir: str = "storage", model_name: str = "sentence-transformers/all-MiniLM-L6-v2", k: int = 5):
+    embed_model = HuggingFaceEmbedding(model_name=model_name)
 
+    vector_store = FaissVectorStore.from_persist_dir(persist_dir)
+    storage_context = StorageContext.from_defaults(vector_store=vector_store, persist_dir=persist_dir)
+    index = load_index_from_storage(storage_context, embed_model=embed_model)
 
-def retrieve(query, model, index, chunks, k=5):
-    q_emb = model.encode([query], normalize_embeddings=True).astype("float32")
-    scores, indices = index.search(q_emb, k)
-    return [{**chunks[idx], "score": float(score)} for score, idx in zip(scores[0], indices[0])]
+    return index.as_retriever(similarity_top_k=k)
 
 
 if __name__ == "__main__":
-    config = load_config()
-    model, index, chunks = load_retriever(config)
+    retriever = load_retriever()
 
-    query = "can I accept a gift from a supplier?"
-    results = retrieve(query, model, index, chunks, k=config["retrieval"]["k"])
+    query = "What are the prohibited AI practices?"
+    results = retriever.retrieve(query)
 
     print(f"Query: {query}\n")
     for r in results:
-        print(f"[{r['score']:.3f}] {r['heading']}")
+        print(f"[{r.score:.3f}] page {r.node.metadata.get('page_label')} | {r.text[:100]!r}")
