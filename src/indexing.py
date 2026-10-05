@@ -28,5 +28,5 @@ if __name__ == "__main__":
     nodes = chunking(docs, max_chars=config["chunking"]["max_chars"])
 
     index = build_index(nodes)
-    index.storage_context.persist(persist_dir="storage")
+    index.storage_context.persist(persist_dir=config["index"]["persist_dir"])
     print(f"Index built and persisted: {len(nodes)} nodes")
