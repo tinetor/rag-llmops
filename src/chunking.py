@@ -16,6 +16,8 @@ def chunking(raw_text: list, max_chars: int = 1500) -> list:
     Generates text nodes based on character length limits without dropping any chunks,
     ensuring 100% of the raw text is preserved.
     """
+    for doc in raw_text:
+        doc.excluded_embed_metadata_keys = list(doc.metadata.keys())    
     # Configure SentenceSplitter using len to measure chunk size in characters
     splitter = SentenceSplitter(
         chunk_size=max_chars,
