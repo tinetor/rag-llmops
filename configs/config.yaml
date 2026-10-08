@@ -2,7 +2,14 @@ data:
   pdf_path: data/ai_act.pdf
 
 chunking:
-  max_chars: 1500
+  max_chars: (your current value)
+  overlap_ratio: 0.1
+
+embedding:
+  model_name: sentence-transformers/all-MiniLM-L6-v2
+
+retrieval:
+  top_k: 5
 
 index:
   persist_dir: storage
