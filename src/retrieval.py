@@ -29,7 +29,11 @@ if __name__ == "__main__":
     from config import load_config
 
     config = load_config()
-    retriever = load_retriever(persist_dir=config["index"]["persist_dir"])
+    retriever = load_retriever(
+        persist_dir=config["index"]["persist_dir"],
+        model_name=config["embedding"]["model_name"],
+        k=config["retrieval"]["top_k"],
+    )
 
     query = "What are the prohibited AI practices?"
     results = retrieve(retriever, query)

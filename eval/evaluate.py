@@ -13,8 +13,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-K = 5  # same k that generation feeds to the model
-
 
 def main():
     golden = json.loads((ROOT / "eval" / "golden_set.json").read_text())
@@ -28,7 +26,12 @@ def main():
     from retrieval import load_retriever, retrieve
 
     config = load_config()
-    retriever = load_retriever(persist_dir=config["index"]["persist_dir"], k=K)
+    k = config["retrieval"]["top_k"]  # same k that generation feeds to the model
+    retriever = load_retriever(
+        persist_dir=config["index"]["persist_dir"],
+        model_name=config["embedding"]["model_name"],
+        k=k,
+    )
 
     by_type = defaultdict(lambda: [0, 0])  # type -> [hits, total]
     misses = []
@@ -42,7 +45,7 @@ def main():
 
     hits = sum(h for h, _ in by_type.values())
     total = sum(t for _, t in by_type.values())
-    print(f"\nrecall@{K}: {hits}/{total} = {hits / total:.0%}")
+    print(f"\nrecall@{k}: {hits}/{total} = {hits / total:.0%}")
     for t, (h, n) in sorted(by_type.items()):
         print(f"  {t}: {h}/{n} = {h / n:.0%}")
 
