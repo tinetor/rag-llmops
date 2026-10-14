@@ -4,12 +4,16 @@ data:
 chunking:
   max_chars: 180
   overlap_ratio: 0.1
+  strategy: "article"
 
 embedding:
-  model_name: sentence-transformers/all-MiniLM-L6-v2
+  model_name: BAAI/bge-base-en-v1.5
 
 retrieval:
-  top_k: 5
+  top_k: 8
+  mode: hybrid
+  candidate_k: 15
 
 index:
   persist_dir: storage
+

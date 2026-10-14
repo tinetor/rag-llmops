@@ -22,6 +22,8 @@ if __name__ == "__main__":
         persist_dir=config["index"]["persist_dir"],
         model_name=config["embedding"]["model_name"],
         k=config["retrieval"]["top_k"],
+        mode=config["retrieval"]["mode"],
+        candidate_k=config["retrieval"]["candidate_k"],
     )
     llm = load_llm()
 
@@ -33,4 +35,5 @@ if __name__ == "__main__":
     print(f"escaped: {result['escaped']}")
     print("sources:")
     for s in result["sources"]:
-        print(f"  page {s['page']} (score {s['score']:.3f})")
+        score = f"{s['score']:.3f}" if s["score"] is not None else "N/A"
+        print(f"  page {s['page']} (score {score})")
