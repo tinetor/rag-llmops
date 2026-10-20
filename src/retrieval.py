@@ -6,11 +6,11 @@ from llama_index.vector_stores.faiss import FaissVectorStore
 
 
 def load_retriever(
-    persist_dir: str = "storage",
-    model_name: str = "sentence-transformers/all-MiniLM-L6-v2",
-    k: int = 5,
-    mode: str = "dense",
-    candidate_k: int = 15,
+    persist_dir: str,
+    model_name: str,
+    k: int,
+    mode: str,
+    candidate_k: int,
 ):
     if mode not in ("dense", "hybrid"):
         raise ValueError(
@@ -73,7 +73,6 @@ def retrieve(retriever, query: str) -> list[dict]:
         {
             "text": result.text,
             "article": result.node.metadata.get("article"),
-            "page": result.node.metadata.get("page_label"),
             "score": result.score,
         }
         for result in results
@@ -112,8 +111,4 @@ if __name__ == "__main__":
             else "Article unknown"
         )
 
-        print(
-            f"[{score}] {article_label} | "
-            f"page {result['page']} | "
-            f"{result['text'][:120]!r}"
-        )
+        print(f"[{score}] {article_label} | {result['text'][:120]!r}")
