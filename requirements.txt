@@ -9,3 +9,6 @@ langchain-text-splitters
 llama-index-readers-file
 pypdf
 llama-index-retrievers-bm25
+llama_index.embeddings.huggingface
+llama_index.vector_stores.faiss
+langfuse
