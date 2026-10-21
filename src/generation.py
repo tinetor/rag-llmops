@@ -1,5 +1,6 @@
 
 import torch
+from langfuse import get_client
 
 from llm import load_llm
 from prompts import ESCAPE_PHRASE, build_prompt
@@ -13,42 +14,91 @@ def generate_answer(
     tokenizer,
     max_new_tokens: int,
 ) -> dict:
-    passages = retrieve(retriever, question)
-    prompt = build_prompt(question, passages)
+    langfuse = get_client()
+    model_name = getattr(model.config, "_name_or_path", "unknown")
 
-    chat = tokenizer.apply_chat_template(
-        [{"role": "user", "content": prompt}],
-        tokenize=False,
-        add_generation_prompt=True,
-    )
+    with langfuse.start_as_current_observation(
+        as_type="span",
+        name="rag-pipeline",
+        input={"question": question},
+    ) as trace:
 
-    inputs = tokenizer(
-        chat,
-        return_tensors="pt",
-    )
+        # 1. Retrieve relevant chunks
+        with langfuse.start_as_current_observation(
+            as_type="span",
+            name="retrieval",
+            input={"question": question},
+        ) as retrieval_span:
+            passages = retrieve(retriever, question)
 
-    device = next(model.parameters()).device
-    inputs = inputs.to(device)
+            retrieval_span.update(
+                output={
+                    "chunk_count": len(passages),
+                    "chunks": passages,
+                }
+            )
 
-    with torch.inference_mode():
-        output_ids = model.generate(
-            **inputs,
-            max_new_tokens=max_new_tokens,
-            do_sample=False,
+        # 2. Build the prompt with the retrieved context
+        prompt = build_prompt(question, passages)
+
+        chat = tokenizer.apply_chat_template(
+            [{"role": "user", "content": prompt}],
+            tokenize=False,
+            add_generation_prompt=True,
         )
 
-    new_tokens = output_ids[0][inputs["input_ids"].shape[1]:]
+        inputs = tokenizer(chat, return_tensors="pt")
+        device = next(model.parameters()).device
+        inputs = inputs.to(device)
 
-    answer = tokenizer.decode(
-        new_tokens,
-        skip_special_tokens=True,
-    ).strip()
+        # 3. Generate the answer with Hugging Face
+        with langfuse.start_as_current_observation(
+            as_type="generation",
+            name='generate-answer',
+            model=model_name,
+            input={"prompt": chat},
+            model_parameters={
+                "max_new_tokens": max_new_tokens,
+                "do_sample": False,
+            },
+        ) as generation:
+            with torch.inference_mode():
+                output_ids = model.generate(
+                    **inputs,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                )
 
-    return {
-        "answer": answer,
-        "sources": passages,
-        "escaped": ESCAPE_PHRASE in answer,
-    }
+            new_tokens = output_ids[0][inputs["input_ids"].shape[1]:]
+
+            answer = tokenizer.decode(
+                new_tokens,
+                skip_special_tokens=True,
+            ).strip()
+
+            generation.update(
+                output=answer,
+                usage_details={
+                    "input": inputs["input_ids"].shape[1],
+                    "output": len(new_tokens),
+                },
+            )
+
+        result = {
+            "answer": answer,
+            "sources": passages,
+            "escaped": ESCAPE_PHRASE in answer,
+        }
+
+        # 4. Record the final pipeline output
+        trace.update(
+            output={
+                "answer": result["answer"],
+                "escaped": result["escaped"],
+            }
+        )
+
+    return result
 
 
 if __name__ == "__main__":
@@ -65,7 +115,6 @@ if __name__ == "__main__":
     )
 
     model, tokenizer = load_llm(config)
-
     max_new_tokens = config["generation"]["max_new_tokens"]
 
     question = "What are the prohibited AI practices?"
@@ -78,6 +127,10 @@ if __name__ == "__main__":
         max_new_tokens=max_new_tokens,
     )
 
+    # Ensure pending traces are sent before the script exits
+    langfuse = get_client()
+    langfuse.flush()
+
     print(f"Q: {question}\n")
     print(f"A: {result['answer']}\n")
     print(f"Escaped: {result['escaped']}")
@@ -89,7 +142,6 @@ if __name__ == "__main__":
             if source["score"] is not None
             else "N/A"
         )
-
         article = source["article"]
         article_label = (
             f"Article {article}"
