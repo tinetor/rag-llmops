@@ -27,7 +27,7 @@ def main():
         candidate_k=config["retrieval"]["candidate_k"],
     )
 
-    model, tokenizer = load_llm(config["generation"]["model_name"])
+    model, tokenizer = load_llm(config)
 
     langfuse = get_client()
     dataset = langfuse.get_dataset("Golden_Dataset")
