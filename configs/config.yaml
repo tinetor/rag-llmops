@@ -18,5 +18,5 @@ index:
   persist_dir: storage
 
 generation:
-  model_name: "Qwen/Qwen2.5-0.5B-Instruct"
+  model_name: Qwen/Qwen2.5-0.5B-Instruct
   max_new_tokens: 300
