@@ -71,7 +71,7 @@ def print_results(name, results, expected_article):
 
         print(
             f"{rank}. Article {article} | score={score} "
-            f"| page={result['page']}"
+           
         )
         print(f"   {result['text'][:180]!r}")
 
