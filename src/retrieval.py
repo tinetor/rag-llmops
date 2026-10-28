@@ -1,4 +1,3 @@
-
 from llama_index.core import Settings, StorageContext, load_index_from_storage
 from llama_index.core.schema import TextNode
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
@@ -73,6 +72,8 @@ def retrieve(retriever, query: str) -> list[dict]:
         {
             "text": result.text,
             "article": result.node.metadata.get("article"),
+            "chapter": result.node.metadata.get("chapter"),
+            "chapter_title": result.node.metadata.get("chapter_title"),
             "score": result.score,
         }
         for result in results
@@ -111,4 +112,14 @@ if __name__ == "__main__":
             else "Article unknown"
         )
 
-        print(f"[{score}] {article_label} | {result['text'][:120]!r}")
+        chapter = result["chapter"]
+        chapter_label = (
+            f"Chapter {chapter} - {result['chapter_title']}"
+            if chapter is not None
+            else "Chapter unknown"
+        )
+
+        print(
+            f"[{score}] {chapter_label} | {article_label} | "
+            f"{result['text'][:120]!r}"
+        )
