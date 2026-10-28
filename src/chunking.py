@@ -12,6 +12,14 @@ ANNEX_RE = re.compile(
     r"(?mi)^[ \t]*ANNEX[ \t]+[IVXLCDM]+[ \t]*$"
 )
 
+# "CHAPTER II" on one line, the chapter title on the next
+# (blank lines between them are tolerated).
+CHAPTER_RE = re.compile(
+    r"(?m)^[ \t]*CHAPTER[ \t]+([IVXLCDM]+)[ \t]*\r?\n"
+    r"(?:[ \t]*\r?\n)*"
+    r"[ \t]*([^\r\n]+?)[ \t]*\r?$"
+)
+
 
 def _build_full_text(raw_docs: list) -> tuple[str, list[dict]]:
     """Join page texts and track each page's global character offsets."""
@@ -49,14 +57,20 @@ def _article_matches(text: str):
     )
 
 
+def _chapter_matches(text: str, article_text_end: int) -> list:
+    """Find chapter headings (only before the annexes)."""
+    return list(CHAPTER_RE.finditer(text[:article_text_end]))
+
+
 def _metadata_for_range(
     start: int,
     end: int,
     page_ranges: list[dict],
     article_matches: list,
+    chapter_matches: list,
     article_text_end: int,
 ) -> dict:
-    """Map a chunk's global character range to pages and article."""
+    """Map a chunk's global character range to pages, chapter and article."""
     overlapping = [
         page for page in page_ranges
         if page["start"] < end and page["end"] > start
@@ -72,17 +86,32 @@ def _metadata_for_range(
         metadata["page_start"] = first_page
         metadata["page_end"] = last_page
 
-    # Chunks beginning in the annexes must not inherit Article 113.
+    # Chunks beginning in the annexes must not inherit Article 113
+    # nor the last chapter.
     if start >= article_text_end:
         metadata["article"] = None
+        metadata["chapter"] = None
+        metadata["chapter_title"] = None
     else:
-        preceding = [
+        preceding_articles = [
             match for match in article_matches
             if match.start() <= start
         ]
         metadata["article"] = (
-            int(preceding[-1].group(1)) if preceding else None
+            int(preceding_articles[-1].group(1))
+            if preceding_articles else None
         )
+
+        preceding_chapters = [
+            match for match in chapter_matches
+            if match.start() <= start
+        ]
+        if preceding_chapters:
+            metadata["chapter"] = preceding_chapters[-1].group(1)
+            metadata["chapter_title"] = preceding_chapters[-1].group(2)
+        else:
+            metadata["chapter"] = None
+            metadata["chapter_title"] = None
 
     return metadata
 
@@ -95,6 +124,7 @@ def _split_by_sentence(
     """Split each source page, preserving its original page boundaries."""
     full_text, page_ranges = _build_full_text(raw_docs)
     _, article_matches, article_text_end = _article_matches(full_text)
+    chapter_matches = _chapter_matches(full_text, article_text_end)
 
     splitter = SentenceSplitter(
         chunk_size=chunk_size,
@@ -126,6 +156,7 @@ def _split_by_sentence(
                 global_end,
                 page_ranges,
                 article_matches,
+                chapter_matches,
                 article_text_end,
             )
 
@@ -146,6 +177,7 @@ def _split_by_article(
     article_text, article_matches, article_text_end = _article_matches(
         full_text
     )
+    chapter_matches = _chapter_matches(full_text, article_text_end)
 
     if not article_matches:
         raise ValueError("No article headings detected. Check ARTICLE_RE.")
@@ -162,10 +194,23 @@ def _split_by_article(
 
     for i, match in enumerate(article_matches):
         start = match.start()
-        end = (
+        next_article_start = (
             article_matches[i + 1].start()
             if i + 1 < len(article_matches)
             else len(article_text)
+        )
+
+        # A chapter heading sits right before the first article of the
+        # chapter; cut the segment there so the heading does not pollute
+        # the previous article's chunk.
+        chapter_in_between = [
+            chapter.start() for chapter in chapter_matches
+            if start < chapter.start() < next_article_start
+        ]
+        end = (
+            min(chapter_in_between)
+            if chapter_in_between
+            else next_article_start
         )
 
         if article_text[start:end].strip():
@@ -219,6 +264,7 @@ def _split_by_article(
                 global_end,
                 page_ranges,
                 article_matches,
+                chapter_matches,
                 article_text_end,
             )
 
@@ -281,7 +327,9 @@ if __name__ == "__main__":
         for i, chunk in enumerate(chunks):
             if chunk.metadata.get("article") is not None:
                 print(
-                    f"[{i}] article={chunk.metadata.get('article')} | "
+                    f"[{i}] chapter={chunk.metadata.get('chapter')} "
+                    f"({chunk.metadata.get('chapter_title')}) | "
+                    f"article={chunk.metadata.get('article')} | "
                     f"page={chunk.metadata.get('page_label')} | "
                     f"text={chunk.text[:100]!r}"
                 )
