@@ -1,3 +1,8 @@
+import re
+# Add near the top with the other regexes
+
+from llama_index.core import Document
+from llama_index.core.node_parser import SentenceSplitter
 # Add near the top with the other regexes
 
 CHAPTER_RE = re.compile(
