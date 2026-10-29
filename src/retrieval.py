@@ -393,7 +393,7 @@ def main():
             chapter=chapters,
         )
 
-        results = retrieve(args.query, retriever)
+        results = retrieve(retriever,args.query)
 
     finally:
         client = get_client(persist_dir)
