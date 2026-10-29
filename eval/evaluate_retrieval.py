@@ -26,7 +26,8 @@ def main():
     retrieval_config = config["retrieval"]
 
     retriever = load_retriever(
-        persist_dir=config["index"]["persist_dir"],
+        persist_dir=config["index"]["persist_dir"] + "_qdrant",
+        collection_name=config["index"]["collection_name"],
         model_name=config["embedding"]["model_name"],
         k=retrieval_config["top_k"],
         mode=retrieval_config["mode"],
