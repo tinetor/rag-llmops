@@ -9,11 +9,7 @@ from llama_index.core import Settings, VectorStoreIndex
 from llama_index.core.llms import MockLLM
 from llama_index.core.retrievers import QueryFusionRetriever
 from llama_index.core.schema import TextNode
-from llama_index.core.vector_stores import (
-    FilterOperator,
-    MetadataFilter,
-    MetadataFilters,
-)
+from llama_index.core.vector_stores import FilterOperator, MetadataFilter, MetadataFilters
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.retrievers.bm25 import BM25Retriever
 from llama_index.vector_stores.qdrant import QdrantVectorStore
@@ -24,13 +20,9 @@ sys.path.insert(0, str(ROOT / "src"))
 from config import load_config  # noqa: E402
 
 
-# ---------------------------------------------------------------------------
-# Setup
-# ---------------------------------------------------------------------------
-
 @lru_cache(maxsize=None)
 def get_client(persist_dir: str) -> QdrantClient:
-    """Return one shared client per directory (local mode allows only one)."""
+    """Return one shared client per local Qdrant directory."""
     return QdrantClient(path=persist_dir)
 
 
@@ -40,11 +32,8 @@ def load_index(
     model_name: str,
 ) -> VectorStoreIndex:
     """Open the existing Qdrant collection as a LlamaIndex index."""
-    # Retrieval only: stop LlamaIndex from trying to load a default LLM.
     Settings.llm = MockLLM()
-
     embed_model = HuggingFaceEmbedding(model_name=model_name)
-
     vector_store = QdrantVectorStore(
         client=get_client(persist_dir),
         collection_name=collection_name,
@@ -55,55 +44,45 @@ def load_index(
     )
 
 
-# ---------------------------------------------------------------------------
-# Stage 1: chapter routing
-# ---------------------------------------------------------------------------
-
 def route_chapters(
     index: VectorStoreIndex,
     query: str,
     top_n: int = 2,
     pool: int = 30,
 ) -> list[tuple[str, float]]:
-    """
-    Pick the chapters most relevant to the query.
+    """Rank chapters by the best dense-retrieval score among their chunks."""
+    if top_n < 1:
+        raise ValueError("top_n must be at least 1.")
+    if pool < 1:
+        raise ValueError("pool must be at least 1.")
 
-    Runs an unfiltered dense search over the articles, then ranks each
-    chapter by the score of its best article.
-
-    Returns:
-        A list of (chapter, score), best first, at most top_n items.
-    """
     retriever = index.as_retriever(similarity_top_k=pool)
+    best_scores: dict[str, float] = {}
 
-    best: dict[str, float] = {}
     for result in retriever.retrieve(query):
-        chapter = result.node.metadata.get("chapter")
+        chapter = (result.node.metadata or {}).get("chapter")
         if chapter is None:
             continue
-
         chapter = str(chapter)
-        score = result.score or 0.0
-        best[chapter] = max(best.get(chapter, float("-inf")), score)
+        score = float(result.score or 0.0)
+        best_scores[chapter] = max(best_scores.get(chapter, float("-inf")), score)
 
-    ranked = sorted(best.items(), key=lambda item: item[1], reverse=True)
+    ranked = sorted(best_scores.items(), key=lambda item: item[1], reverse=True)
     return ranked[:top_n]
 
 
-# ---------------------------------------------------------------------------
-# Stage 2: retrieval inside the chosen chapters
-# ---------------------------------------------------------------------------
-
 def normalize_chapters(chapter: str | list[str] | None) -> list[str] | None:
-    """Accept one chapter or a list; always return a list (or None)."""
+    """Normalize one chapter or a list of chapters."""
     if chapter is None:
         return None
     if isinstance(chapter, str):
         return [chapter]
-    return [str(c) for c in chapter] or None
+    chapters = [str(value) for value in chapter]
+    return chapters or None
 
 
 def build_filters(chapters: list[str] | None) -> MetadataFilters | None:
+    """Build a LlamaIndex metadata filter for the selected chapters."""
     if not chapters:
         return None
     return MetadataFilters(
@@ -122,7 +101,7 @@ def load_nodes(
     collection_name: str,
     chapters: list[str] | None,
 ) -> list[TextNode]:
-    """Read the nodes (optionally only from some chapters) to build BM25."""
+    """Load stored nodes for BM25, optionally restricted to selected chapters."""
     scroll_filter = None
     if chapters:
         scroll_filter = models.Filter(
@@ -161,8 +140,7 @@ def load_nodes(
             break
 
     if skipped:
-        print(f"Warning: {skipped} points without _node_content were skipped.")
-
+        print(f"Warning: skipped {skipped} Qdrant points without _node_content.")
     return nodes
 
 
@@ -175,20 +153,11 @@ def build_retriever(
     candidate_k: int,
     chapter: str | list[str] | None = None,
 ):
-    """
-    Build a retriever, optionally restricted to one or more chapters.
-
-    Args:
-        index: Index returned by load_index.
-        persist_dir: Local Qdrant directory (to reuse the shared client).
-        collection_name: Qdrant collection name.
-        k: Number of final results.
-        mode: "dense" or "hybrid".
-        candidate_k: Candidate pool size for hybrid retrieval.
-        chapter: A chapter, a list of chapters, or None for no filter.
-    """
+    """Build a dense or hybrid retriever, optionally filtered by chapter."""
     if mode not in ("dense", "hybrid"):
         raise ValueError("mode must be either 'dense' or 'hybrid'.")
+    if k < 1:
+        raise ValueError("k must be at least 1.")
 
     chapters = normalize_chapters(chapter)
     filters = build_filters(chapters)
@@ -196,11 +165,10 @@ def build_retriever(
     if mode == "dense":
         return index.as_retriever(similarity_top_k=k, filters=filters)
 
+    pool = max(candidate_k, k)
     nodes = load_nodes(get_client(persist_dir), collection_name, chapters)
     if not nodes:
-        raise ValueError(f"No text nodes found (chapters={chapters!r}).")
-
-    pool = max(candidate_k, k)
+        raise ValueError(f"No text nodes found for chapters={chapters!r}.")
 
     vector_retriever = index.as_retriever(
         similarity_top_k=pool,
@@ -221,7 +189,7 @@ def build_retriever(
 
 
 def retrieve(query: str, retriever) -> list[dict]:
-    """Retrieve relevant chunks and return their text and metadata."""
+    """Return retrieved chunks with relevant metadata."""
     output = []
     for result in retriever.retrieve(query):
         node = result.node
@@ -238,13 +206,9 @@ def retrieve(query: str, retriever) -> list[dict]:
     return output
 
 
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
-
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Run retrieval against the Qdrant index."
+        description="Retrieve chunks from the existing Qdrant index."
     )
     parser.add_argument(
         "--query",
@@ -262,43 +226,54 @@ def main():
         "--chapter",
         nargs="+",
         default=None,
-        help="Manual chapter filter, e.g. --chapter II III.",
+        help="Manually filter chapters, e.g. --chapter II III.",
     )
     parser.add_argument(
         "--route",
         action="store_true",
-        help="Pick chapters automatically before searching (stage 1).",
+        help="Automatically select chapters before retrieving chunks.",
     )
     parser.add_argument(
         "--top-chapters",
         type=int,
         default=2,
-        help="How many chapters to keep when using --route.",
+        help="Number of chapters selected by routing (default: 2).",
+    )
+    parser.add_argument(
+        "--route-pool",
+        type=int,
+        default=30,
+        help="Number of global dense results used for chapter routing (default: 30).",
     )
     parser.add_argument(
         "--top-k",
         type=int,
         default=None,
-        help="Number of results to return.",
+        help="Number of final chunks to return.",
     )
     parser.add_argument(
         "--full",
         action="store_true",
-        help="Print the full text instead of the first 500 characters.",
+        help="Print full chunk text instead of the first 500 characters.",
     )
     args = parser.parse_args()
 
     if args.route and args.chapter:
         parser.error("Use either --route or --chapter, not both.")
+    if args.top_chapters < 1:
+        parser.error("--top-chapters must be at least 1.")
+    if args.route_pool < 1:
+        parser.error("--route-pool must be at least 1.")
 
     config = load_config()
-
     mode = args.mode or config["retrieval"]["mode"]
-    top_k = (
-        args.top_k if args.top_k is not None else config["retrieval"]["top_k"]
-    )
+    top_k = args.top_k if args.top_k is not None else config["retrieval"]["top_k"]
     persist_dir = config["index"]["persist_dir"] + "_qdrant"
     collection_name = config["index"]["collection_name"]
+
+    routed: list[tuple[str, float]] | None = None
+    chapters = args.chapter
+    results: list[dict] = []
 
     try:
         index = load_index(
@@ -307,13 +282,19 @@ def main():
             model_name=config["embedding"]["model_name"],
         )
 
-        chapters = args.chapter
-        routed = None
         if args.route:
             routed = route_chapters(
-                index, args.query, top_n=args.top_chapters
+                index=index,
+                query=args.query,
+                top_n=args.top_chapters,
+                pool=args.route_pool,
             )
-            chapters = [c for c, _ in routed]
+            chapters = [chapter for chapter, _ in routed]
+            if not chapters:
+                raise ValueError(
+                    "Could not identify a chapter from the initial dense search. "
+                    "Try a larger --route-pool or run without --route."
+                )
 
         retriever = build_retriever(
             index=index,
@@ -331,9 +312,9 @@ def main():
     print(f"\nQuery: {args.query}")
     print(f"Mode: {mode}")
     if routed is not None:
-        print("Routed chapters: " + ", ".join(f"{c} ({s:.3f})" for c, s in routed))
+        print("Routed chapters: " + ", ".join(f"{chapter} ({score:.3f})" for chapter, score in routed))
     else:
-        print(f"Chapter filter: {chapters or 'None'}")
+        print(f"Chapter filter: {chapters or 'None (global search)'}")
     print(f"Results: {len(results)}")
 
     for i, result in enumerate(results, start=1):
