@@ -1,20 +1,39 @@
-import faiss
+
+from pathlib import Path
+
+from qdrant_client import QdrantClient
 from llama_index.core import StorageContext, VectorStoreIndex
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-from llama_index.vector_stores.faiss import FaissVectorStore
+from llama_index.vector_stores.qdrant import QdrantVectorStore
 
 
-def build_index(nodes, model_name: str = "sentence-transformers/all-MiniLM-L6-v2"):
+def build_index(
+    nodes,
+    model_name: str = "sentence-transformers/all-MiniLM-L6-v2",
+    persist_dir: str = "./storage_qdrant",
+    collection_name: str = "eu_ai_act",
+):
+    Path(persist_dir).mkdir(parents=True, exist_ok=True)
+
     embed_model = HuggingFaceEmbedding(model_name=model_name)
 
-    # ask the model for its real dimension instead of hardcoding it
-    embed_dim = len(embed_model.get_text_embedding("probe"))
+    client = QdrantClient(path=persist_dir)
 
-    faiss_index = faiss.IndexFlatIP(embed_dim)
-    vector_store = FaissVectorStore(faiss_index=faiss_index)
-    storage_context = StorageContext.from_defaults(vector_store=vector_store)
+    vector_store = QdrantVectorStore(
+        client=client,
+        collection_name=collection_name,
+    )
 
-    index = VectorStoreIndex(nodes, storage_context=storage_context, embed_model=embed_model)
+    storage_context = StorageContext.from_defaults(
+        vector_store=vector_store
+    )
+
+    index = VectorStoreIndex(
+        nodes,
+        storage_context=storage_context,
+        embed_model=embed_model,
+    )
+
     return index
 
 
@@ -33,7 +52,10 @@ if __name__ == "__main__":
         strategy=config["chunking"]["strategy"],
     )
 
+    index = build_index(
+        nodes,
+        model_name=config["embedding"]["model_name"],
+        persist_dir=config["index"]["persist_dir"] + "_qdrant",
+    )
 
-    index = build_index(nodes, model_name=config["embedding"]["model_name"])
-    index.storage_context.persist(persist_dir=config["index"]["persist_dir"])
-    print(f"Index built and persisted: {len(nodes)} nodes")
+    print(f"Qdrant index built: {len(nodes)} nodes")

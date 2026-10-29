@@ -1,5 +1,5 @@
 sentence-transformers
-faiss-cpu
+qdrant_client
 transformers
 accelerate
 torch

@@ -1,11 +1,16 @@
-from llama_index.core import Settings, StorageContext, load_index_from_storage
+
+import json
+
+from qdrant_client import QdrantClient
+from llama_index.core import Settings, VectorStoreIndex
 from llama_index.core.schema import TextNode
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-from llama_index.vector_stores.faiss import FaissVectorStore
+from llama_index.vector_stores.qdrant import QdrantVectorStore
 
 
 def load_retriever(
     persist_dir: str,
+    collection_name: str,
     model_name: str,
     k: int,
     mode: str,
@@ -16,37 +21,69 @@ def load_retriever(
             f"Unknown retrieval mode: {mode!r}. Use 'dense' or 'hybrid'."
         )
 
+    # Load embedding model
     embed_model = HuggingFaceEmbedding(model_name=model_name)
 
-    vector_store = FaissVectorStore.from_persist_dir(persist_dir)
-    storage_context = StorageContext.from_defaults(
-        vector_store=vector_store,
-        persist_dir=persist_dir,
+    # Connect to the local Qdrant database
+    client = QdrantClient(path=persist_dir)
+
+    vector_store = QdrantVectorStore(
+        client=client,
+        collection_name=collection_name,
     )
 
-    index = load_index_from_storage(
-        storage_context,
+    # Reconstruct the LlamaIndex vector index
+    index = VectorStoreIndex.from_vector_store(
+        vector_store=vector_store,
         embed_model=embed_model,
     )
 
+    # Dense retrieval
     if mode == "dense":
         return index.as_retriever(similarity_top_k=k)
 
+    # Hybrid retrieval: dense vectors + BM25
     from llama_index.core.retrievers import QueryFusionRetriever
     from llama_index.retrievers.bm25 import BM25Retriever
 
     pool = max(candidate_k, k)
-    vector_retriever = index.as_retriever(similarity_top_k=pool)
 
-    nodes = [
-        node
-        for node in index.docstore.docs.values()
-        if isinstance(node, TextNode)
-    ]
+    vector_retriever = index.as_retriever(
+        similarity_top_k=pool
+    )
+
+    # Retrieve stored nodes from Qdrant for BM25
+    nodes = []
+    offset = None
+
+    while True:
+        points, offset = client.scroll(
+            collection_name=collection_name,
+            limit=256,
+            offset=offset,
+            with_payload=True,
+            with_vectors=False,
+        )
+
+        for point in points:
+            payload = point.payload or {}
+            node_content = payload.get("_node_content")
+
+            if node_content:
+                node_data = (
+                    json.loads(node_content)
+                    if isinstance(node_content, str)
+                    else node_content
+                )
+                nodes.append(TextNode.from_dict(node_data))
+
+        if offset is None:
+            break
 
     if not nodes:
         raise ValueError(
-            "No TextNodes found in the persisted document store."
+            "No nodes found in the Qdrant collection for BM25. "
+            "Check that the collection contains LlamaIndex node payloads."
         )
 
     bm25_retriever = BM25Retriever.from_defaults(
@@ -86,7 +123,8 @@ if __name__ == "__main__":
     config = load_config()
 
     retriever = load_retriever(
-        persist_dir=config["index"]["persist_dir"],
+        persist_dir=config["index"]["persist_dir"] + "_qdrant",
+        collection_name=config["index"]["collection_name"],
         model_name=config["embedding"]["model_name"],
         k=config["retrieval"]["top_k"],
         mode=config["retrieval"]["mode"],

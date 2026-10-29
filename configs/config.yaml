@@ -15,7 +15,8 @@ retrieval:
   candidate_k: 15
 
 index:
-  persist_dir: storage
+  persist_dir: ./storage
+  collection_name: eu_ai_act
 
 generation:
   model_name: Qwen/Qwen2.5-0.5B-Instruct
