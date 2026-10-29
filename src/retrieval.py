@@ -3,8 +3,15 @@ import json
 
 from qdrant_client import QdrantClient
 from llama_index.core import Settings, VectorStoreIndex
+from llama_index.core.retrievers import QueryFusionRetriever
 from llama_index.core.schema import TextNode
+from llama_index.core.vector_stores import (
+    FilterOperator,
+    MetadataFilter,
+    MetadataFilters,
+)
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+from llama_index.retrievers.bm25 import BM25Retriever
 from llama_index.vector_stores.qdrant import QdrantVectorStore
 
 
@@ -15,16 +22,32 @@ def load_retriever(
     k: int,
     mode: str,
     candidate_k: int,
+    chapter: str | None = None,
 ):
-    if mode not in ("dense", "hybrid"):
-        raise ValueError(
-            f"Unknown retrieval mode: {mode!r}. Use 'dense' or 'hybrid'."
-        )
+    """
+    Load a Qdrant retriever with optional chapter filtering.
 
-    # Load embedding model
+    Supported modes:
+        - dense: dense vector retrieval through Qdrant
+        - hybrid: dense retrieval combined with BM25 through RRF
+
+    Args:
+        persist_dir: Local Qdrant storage directory.
+        collection_name: Qdrant collection name.
+        model_name: Hugging Face embedding model name.
+        k: Number of final results to return.
+        mode: Retrieval mode, either "dense" or "hybrid".
+        candidate_k: Candidate pool size for hybrid retrieval.
+        chapter: Optional chapter filter, e.g. "III".
+
+    Returns:
+        A configured LlamaIndex retriever.
+    """
+    if mode not in ("dense", "hybrid"):
+        raise ValueError("mode must be either 'dense' or 'hybrid'.")
+
     embed_model = HuggingFaceEmbedding(model_name=model_name)
 
-    # Connect to the local Qdrant database
     client = QdrantClient(path=persist_dir)
 
     vector_store = QdrantVectorStore(
@@ -32,27 +55,33 @@ def load_retriever(
         collection_name=collection_name,
     )
 
-    # Reconstruct the LlamaIndex vector index
     index = VectorStoreIndex.from_vector_store(
         vector_store=vector_store,
         embed_model=embed_model,
     )
 
-    # Dense retrieval
-    if mode == "dense":
-        return index.as_retriever(similarity_top_k=k)
+    metadata_filters = None
 
-    # Hybrid retrieval: dense vectors + BM25
-    from llama_index.core.retrievers import QueryFusionRetriever
-    from llama_index.retrievers.bm25 import BM25Retriever
+    if chapter is not None:
+        metadata_filters = MetadataFilters(
+            filters=[
+                MetadataFilter(
+                    key="chapter",
+                    value=chapter,
+                    operator=FilterOperator.EQ,
+                )
+            ]
+        )
+
+    if mode == "dense":
+        return index.as_retriever(
+            similarity_top_k=k,
+            filters=metadata_filters,
+        )
 
     pool = max(candidate_k, k)
 
-    vector_retriever = index.as_retriever(
-        similarity_top_k=pool
-    )
-
-    # Retrieve stored nodes from Qdrant for BM25
+    # Load nodes for the lexical BM25 retriever.
     nodes = []
     offset = None
 
@@ -67,24 +96,37 @@ def load_retriever(
 
         for point in points:
             payload = point.payload or {}
-            node_content = payload.get("_node_content")
 
-            if node_content:
-                node_data = (
-                    json.loads(node_content)
-                    if isinstance(node_content, str)
-                    else node_content
-                )
-                nodes.append(TextNode.from_dict(node_data))
+            if chapter is not None and payload.get("chapter") != chapter:
+                continue
+
+            node_data = payload.get("_node_content")
+
+            if not node_data:
+                continue
+
+            if isinstance(node_data, str):
+                node_data = json.loads(node_data)
+
+            nodes.append(TextNode.from_dict(node_data))
 
         if offset is None:
             break
 
     if not nodes:
+        if chapter is not None:
+            raise ValueError(
+                f"No nodes found for chapter {chapter!r}."
+            )
+
         raise ValueError(
-            "No nodes found in the Qdrant collection for BM25. "
-            "Check that the collection contains LlamaIndex node payloads."
+            "No text nodes were found in the Qdrant collection."
         )
+
+    vector_retriever = index.as_retriever(
+        similarity_top_k=pool,
+        filters=metadata_filters,
+    )
 
     bm25_retriever = BM25Retriever.from_defaults(
         nodes=nodes,
@@ -94,7 +136,10 @@ def load_retriever(
     Settings.llm = None
 
     return QueryFusionRetriever(
-        retrievers=[vector_retriever, bm25_retriever],
+        retrievers=[
+            vector_retriever,
+            bm25_retriever,
+        ],
         similarity_top_k=k,
         num_queries=1,
         mode="reciprocal_rerank",
@@ -102,19 +147,29 @@ def load_retriever(
     )
 
 
-def retrieve(retriever, query: str) -> list[dict]:
+def retrieve(query: str, retriever):
+    """
+    Retrieve relevant chunks and return their text and metadata.
+    """
     results = retriever.retrieve(query)
 
-    return [
-        {
-            "text": result.text,
-            "article": result.node.metadata.get("article"),
-            "chapter": result.node.metadata.get("chapter"),
-            "chapter_title": result.node.metadata.get("chapter_title"),
-            "score": result.score,
-        }
-        for result in results
-    ]
+    output = []
+
+    for result in results:
+        node = result.node
+        metadata = node.metadata or {}
+
+        output.append(
+            {
+                "text": node.get_content(),
+                "article": metadata.get("article"),
+                "chapter": metadata.get("chapter"),
+                "chapter_title": metadata.get("chapter_title"),
+                "score": result.score,
+            }
+        )
+
+    return output
 
 
 if __name__ == "__main__":
@@ -132,32 +187,11 @@ if __name__ == "__main__":
     )
 
     query = "What are the prohibited AI practices?"
-    results = retrieve(retriever, query)
+    results = retrieve(query, retriever)
 
-    print(f"Query: {query}\n")
-
-    for result in results:
-        score = (
-            f"{result['score']:.3f}"
-            if result["score"] is not None
-            else "N/A"
-        )
-
-        article = result["article"]
-        article_label = (
-            f"Article {article}"
-            if article is not None
-            else "Article unknown"
-        )
-
-        chapter = result["chapter"]
-        chapter_label = (
-            f"Chapter {chapter} - {result['chapter_title']}"
-            if chapter is not None
-            else "Chapter unknown"
-        )
-
-        print(
-            f"[{score}] {chapter_label} | {article_label} | "
-            f"{result['text'][:120]!r}"
-        )
+    for i, result in enumerate(results, start=1):
+        print(f"\nResult {i}")
+        print(f"Article: {result['article']}")
+        print(f"Chapter: {result['chapter']}")
+        print(f"Score: {result['score']}")
+        print(result["text"][:500])
