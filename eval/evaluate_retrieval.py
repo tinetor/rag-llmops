@@ -22,12 +22,16 @@ from retrieval import (
     get_client as get_qdrant_client,
 )
 
-DATASET_NAME = "Golden_Dataset"
-
 
 def main():
     parser = argparse.ArgumentParser(
         description="Evaluate article retrieval with Langfuse."
+    )
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default="Golden_Dataset",
+        help="Langfuse dataset name (default: Golden_Dataset).",
     )
     parser.add_argument(
         "--route",
@@ -46,6 +50,7 @@ def main():
         default=30,
         help="Number of global dense results used for chapter routing.",
     )
+
     args = parser.parse_args()
 
     if args.top_chapters < 1 or args.route_pool < 1:
@@ -76,6 +81,7 @@ def main():
             )
             qdrant_client = get_qdrant_client(persist_dir)
             retriever = None
+
             experiment_name = (
                 f"Retrieval routed - top {args.top_chapters} chapters"
             )
@@ -92,10 +98,15 @@ def main():
             )
             experiment_name = "Retrieval baseline"
 
-        dataset = langfuse.get_dataset(DATASET_NAME)
+        # Load the dataset selected from the command line.
+        dataset = langfuse.get_dataset(args.dataset)
+
         print(f"Dataset: {dataset.name} | Items: {len(dataset.items)}")
         print(f"Mode: {mode}")
-        print(f"Chapter routing: {'enabled' if args.route else 'disabled'}")
+        print(
+            f"Chapter routing: "
+            f"{'enabled' if args.route else 'disabled'}"
+        )
 
         def retrieval_task(*, item, **kwargs):
             question = item.input["question"]
@@ -130,16 +141,17 @@ def main():
                         chapter=chapters,
                     )
 
-                # Note argument order: retrieve(query, retriever).
-                chunks = retrieve(question_retriever,question)
+                chunks = retrieve(question_retriever, question)
             else:
-                chunks = retrieve(retriever,question )
+                chunks = retrieve(retriever, question)
 
-            articles = sorted({
-                str(chunk["article"])
-                for chunk in chunks
-                if chunk.get("article") is not None
-            })
+            articles = sorted(
+                {
+                    str(chunk["article"])
+                    for chunk in chunks
+                    if chunk.get("article") is not None
+                }
+            )
 
             return {
                 "question": question,
@@ -166,7 +178,8 @@ def main():
             description=(
                 "Evaluate whether expected articles appear in retrieved "
                 "chunks. Chapter routing is "
-                f"{'enabled' if args.route else 'disabled'}."
+                f"{'enabled' if args.route else 'disabled'}. "
+                f"Dataset: {args.dataset}."
             ),
             task=retrieval_task,
             evaluators=[article_hit_evaluator],
