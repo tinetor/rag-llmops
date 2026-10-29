@@ -263,7 +263,7 @@ def load_retriever(
     )
 
 
-def retrieve(query: str, retriever) -> list[dict]:
+def retrieve( retriever,query: str) -> list[dict]:
     """Return retrieved text and metadata."""
     output = []
 
