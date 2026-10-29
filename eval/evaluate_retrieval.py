@@ -131,9 +131,9 @@ def main():
                     )
 
                 # Note argument order: retrieve(query, retriever).
-                chunks = retrieve(question, question_retriever)
+                chunks = retrieve(question_retriever,question)
             else:
-                chunks = retrieve(question, retriever)
+                chunks = retrieve(retriever,question )
 
             articles = sorted({
                 str(chunk["article"])
