@@ -163,27 +163,65 @@ def retrieve(query: str, retriever):
 
     return output
 
-
 if __name__ == "__main__":
+    import argparse
     from config import load_config
 
+    parser = argparse.ArgumentParser(
+        description="Run retrieval against the Qdrant index."
+    )
+    parser.add_argument(
+        "--query",
+        type=str,
+        default="What are the prohibited AI practices?",
+        help="Search query.",
+    )
+    parser.add_argument(
+        "--mode",
+        choices=["dense", "hybrid"],
+        default=None,
+        help="Retrieval mode. Defaults to the config setting.",
+    )
+    parser.add_argument(
+        "--chapter",
+        type=str,
+        default=None,
+        help="Optional chapter filter, e.g. III.",
+    )
+    parser.add_argument(
+        "--top-k",
+        type=int,
+        default=None,
+        help="Number of results to return.",
+    )
+    args = parser.parse_args()
+
     config = load_config()
+
+    mode = args.mode or config["retrieval"]["mode"]
+    top_k = args.top_k or config["retrieval"]["top_k"]
 
     retriever = load_retriever(
         persist_dir=config["index"]["persist_dir"] + "_qdrant",
         collection_name=config["index"]["collection_name"],
         model_name=config["embedding"]["model_name"],
-        k=config["retrieval"]["top_k"],
-        mode=config["retrieval"]["mode"],
+        k=top_k,
+        mode=mode,
         candidate_k=config["retrieval"]["candidate_k"],
+        chapter=args.chapter,
     )
 
-    query = "What are the prohibited AI practices?"
-    results = retrieve(query, retriever)
+    results = retrieve(args.query, retriever)
+
+    print(f"\nQuery: {args.query}")
+    print(f"Mode: {mode}")
+    print(f"Chapter filter: {args.chapter or 'None'}")
+    print(f"Results: {len(results)}")
 
     for i, result in enumerate(results, start=1):
-        print(f"\nResult {i}")
-        print(f"Article: {result['article']}")
+        print(f"\n--- Result {i} ---")
         print(f"Chapter: {result['chapter']}")
+        print(f"Article: {result['article']}")
+        print(f"Chapter title: {result['chapter_title']}")
         print(f"Score: {result['score']}")
         print(result["text"][:500])
