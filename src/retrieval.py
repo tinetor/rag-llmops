@@ -25,20 +25,16 @@ def load_retriever(
     chapter: str | None = None,
 ):
     """
-    Load a Qdrant retriever with optional chapter filtering.
-
-    Supported modes:
-        - dense: dense vector retrieval through Qdrant
-        - hybrid: dense retrieval combined with BM25 through RRF
+    Load a Qdrant retriever with an optional chapter filter.
 
     Args:
         persist_dir: Local Qdrant storage directory.
         collection_name: Qdrant collection name.
         model_name: Hugging Face embedding model name.
-        k: Number of final results to return.
+        k: Number of final results.
         mode: Retrieval mode, either "dense" or "hybrid".
         candidate_k: Candidate pool size for hybrid retrieval.
-        chapter: Optional chapter filter, e.g. "III".
+        chapter: Optional chapter identifier, such as "III".
 
     Returns:
         A configured LlamaIndex retriever.
@@ -81,7 +77,6 @@ def load_retriever(
 
     pool = max(candidate_k, k)
 
-    # Load nodes for the lexical BM25 retriever.
     nodes = []
     offset = None
 
@@ -136,10 +131,7 @@ def load_retriever(
     Settings.llm = None
 
     return QueryFusionRetriever(
-        retrievers=[
-            vector_retriever,
-            bm25_retriever,
-        ],
+        retrievers=[vector_retriever, bm25_retriever],
         similarity_top_k=k,
         num_queries=1,
         mode="reciprocal_rerank",
