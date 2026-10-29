@@ -1,5 +1,7 @@
+
 """Evaluate article retrieval using a Langfuse dataset experiment."""
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -11,12 +13,44 @@ if str(SRC) not in sys.path:
 
 from langfuse import Evaluation, get_client
 from config import load_config
-from retrieval import load_retriever, retrieve
+from retrieval import (
+    load_retriever,
+    retrieve,
+    load_index,
+    route_chapters,
+    build_retriever,
+    get_client as get_qdrant_client,
+)
 
 DATASET_NAME = "Golden_Dataset"
 
 
 def main():
+    parser = argparse.ArgumentParser(
+        description="Evaluate article retrieval with Langfuse."
+    )
+    parser.add_argument(
+        "--route",
+        action="store_true",
+        help="Enable automatic chapter routing before retrieval.",
+    )
+    parser.add_argument(
+        "--top-chapters",
+        type=int,
+        default=2,
+        help="Number of chapters selected by the routing stage.",
+    )
+    parser.add_argument(
+        "--route-pool",
+        type=int,
+        default=30,
+        help="Number of global dense results used for chapter routing.",
+    )
+    args = parser.parse_args()
+
+    if args.top_chapters < 1 or args.route_pool < 1:
+        parser.error("--top-chapters and --route-pool must be positive.")
+
     langfuse = get_client()
 
     if not langfuse.auth_check():
@@ -24,55 +58,115 @@ def main():
 
     config = load_config()
     retrieval_config = config["retrieval"]
+    persist_dir = config["index"]["persist_dir"] + "_qdrant"
+    collection_name = config["index"]["collection_name"]
+    mode = retrieval_config["mode"]
+    top_k = retrieval_config["top_k"]
+    candidate_k = retrieval_config["candidate_k"]
 
-    retriever = load_retriever(
-        persist_dir=config["index"]["persist_dir"] + "_qdrant",
-        collection_name=config["index"]["collection_name"],
-        model_name=config["embedding"]["model_name"],
-        k=retrieval_config["top_k"],
-        mode=retrieval_config["mode"],
-        candidate_k=retrieval_config["candidate_k"],
-    )
-
-    dataset = langfuse.get_dataset(DATASET_NAME)
-    print(f"Dataset: {dataset.name} | Items: {len(dataset.items)}")
-
-    def retrieval_task(*, item, **kwargs):
-        question = item.input["question"]
-        chunks = retrieve(retriever, question)
-
-        articles = sorted({
-            str(chunk["article"])
-            for chunk in chunks
-            if chunk.get("article") is not None
-        })
-
-        return {
-            "question": question,
-            "retrieved_articles": articles,
-            "chunks": chunks,
-        }
-
-    def article_hit_evaluator(*, output, expected_output, **kwargs):
-        expected = set(map(str, expected_output["articles"]))
-        retrieved = set(output["retrieved_articles"])
-        hit = bool(expected & retrieved)
-
-        return Evaluation(
-            name="article_hit",
-            value=1.0 if hit else 0.0,
-            comment=(
-                f"Expected: {sorted(expected)}; "
-                f"Retrieved: {sorted(retrieved)}"
-            ),
-        )
+    qdrant_client = None
 
     try:
+        if args.route:
+            # Load the index once; route each question separately.
+            index = load_index(
+                persist_dir=persist_dir,
+                collection_name=collection_name,
+                model_name=config["embedding"]["model_name"],
+            )
+            qdrant_client = get_qdrant_client(persist_dir)
+            retriever = None
+            experiment_name = (
+                f"Retrieval routed - top {args.top_chapters} chapters"
+            )
+        else:
+            # Original baseline: global retrieval, without routing.
+            index = None
+            retriever = load_retriever(
+                persist_dir=persist_dir,
+                collection_name=collection_name,
+                model_name=config["embedding"]["model_name"],
+                k=top_k,
+                mode=mode,
+                candidate_k=candidate_k,
+            )
+            experiment_name = "Retrieval baseline"
+
+        dataset = langfuse.get_dataset(DATASET_NAME)
+        print(f"Dataset: {dataset.name} | Items: {len(dataset.items)}")
+        print(f"Mode: {mode}")
+        print(f"Chapter routing: {'enabled' if args.route else 'disabled'}")
+
+        def retrieval_task(*, item, **kwargs):
+            question = item.input["question"]
+
+            if args.route:
+                routed = route_chapters(
+                    index=index,
+                    query=question,
+                    top_n=args.top_chapters,
+                    pool=args.route_pool,
+                )
+                chapters = [chapter for chapter, _ in routed]
+
+                if not chapters:
+                    # No chapter could be identified; use global retrieval.
+                    question_retriever = build_retriever(
+                        index=index,
+                        persist_dir=persist_dir,
+                        collection_name=collection_name,
+                        k=top_k,
+                        mode=mode,
+                        candidate_k=candidate_k,
+                    )
+                else:
+                    question_retriever = build_retriever(
+                        index=index,
+                        persist_dir=persist_dir,
+                        collection_name=collection_name,
+                        k=top_k,
+                        mode=mode,
+                        candidate_k=candidate_k,
+                        chapter=chapters,
+                    )
+
+                # Note argument order: retrieve(query, retriever).
+                chunks = retrieve(question, question_retriever)
+            else:
+                chunks = retrieve(question, retriever)
+
+            articles = sorted({
+                str(chunk["article"])
+                for chunk in chunks
+                if chunk.get("article") is not None
+            })
+
+            return {
+                "question": question,
+                "retrieved_articles": articles,
+                "chunks": chunks,
+            }
+
+        def article_hit_evaluator(*, output, expected_output, **kwargs):
+            expected = set(map(str, expected_output["articles"]))
+            retrieved = set(output["retrieved_articles"])
+            hit = bool(expected & retrieved)
+
+            return Evaluation(
+                name="article_hit",
+                value=1.0 if hit else 0.0,
+                comment=(
+                    f"Expected: {sorted(expected)}; "
+                    f"Retrieved: {sorted(retrieved)}"
+                ),
+            )
+
         result = dataset.run_experiment(
-            name="Retrieval baseline",
+            name=experiment_name,
             description=(
-                "Evaluate whether expected articles appear "
-                "in the retrieved chunks."
+                "Evaluate whether expected articles appear in retrieved "
+                "chunks. Chapter routing is "
+                f"{'enabled' if args.route else 'disabled'}."
             ),
             task=retrieval_task,
             evaluators=[article_hit_evaluator],
@@ -84,6 +178,10 @@ def main():
             print("Experiment:", result.experiment_url)
 
     finally:
+        if qdrant_client is not None:
+            qdrant_client.close()
+            get_qdrant_client.cache_clear()
+
         langfuse.flush()
 
 
