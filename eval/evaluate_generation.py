@@ -42,16 +42,20 @@ def parse_args():
         "--max-items",
         type=int,
         default=None,
-        help="Maximum number of dataset items to evaluate.",
+        help=(
+            "Limit the number of questions. "
+            "When specified, runs a local test without creating "
+            "a Langfuse experiment."
+        ),
     )
 
     args = parser.parse_args()
 
     if args.max_new_tokens is not None and args.max_new_tokens < 1:
-        parser.error("--max-new-tokens must be positive.")
+        parser.error("--max-new-tokens must be a positive integer.")
 
     if args.max_items is not None and args.max_items < 1:
-        parser.error("--max-items must be positive.")
+        parser.error("--max-items must be a positive integer.")
 
     return args
 
@@ -59,6 +63,9 @@ def parse_args():
 def main():
     args = parse_args()
 
+    # ---------------------------------------------------------
+    # 1. Load configuration
+    # ---------------------------------------------------------
     config_path = ROOT_DIR / "configs" / "config.yaml"
 
     with open(config_path, encoding="utf-8") as file:
@@ -67,7 +74,12 @@ def main():
     if args.max_new_tokens is not None:
         config["generation"]["max_new_tokens"] = args.max_new_tokens
 
-    # Load the existing Qdrant collection. Do not rebuild the index.
+    max_new_tokens = config["generation"]["max_new_tokens"]
+
+    # ---------------------------------------------------------
+    # 2. Load the existing retriever and model
+    # ---------------------------------------------------------
+    # Uses the existing Qdrant collection; does not rebuild the index.
     retriever = load_retriever(
         persist_dir=config["index"]["persist_dir"],
         collection_name=config["index"]["collection_name"],
@@ -78,6 +90,10 @@ def main():
     )
 
     model, tokenizer = load_llm(config)
+
+    # ---------------------------------------------------------
+    # 3. Connect to Langfuse and select dataset
+    # ---------------------------------------------------------
     langfuse = get_client()
 
     try:
@@ -86,13 +102,36 @@ def main():
 
         dataset = langfuse.get_dataset(args.dataset)
 
+        items = list(dataset.items)
+
+        if args.max_items is not None:
+            items = items[:args.max_items]
+
+        if not items:
+            raise RuntimeError(
+                f"Dataset '{args.dataset}' contains no items."
+            )
+
+        print("=" * 60)
+        print("RAG GENERATION EVALUATION")
+        print("=" * 60)
         print(f"Dataset: {dataset.name}")
         print(f"Available items: {len(dataset.items)}")
+        print(f"Items selected: {len(items)}")
+        print(f"Max new tokens: {max_new_tokens}")
         print(
-            "Max new tokens: "
-            f"{config['generation']['max_new_tokens']}"
+            "Execution mode: "
+            + (
+                "LOCAL TEST (no Langfuse experiment)"
+                if args.max_items is not None
+                else "FULL LANGFUSE EXPERIMENT"
+            )
         )
+        print("=" * 60)
 
+        # -----------------------------------------------------
+        # 4. Generation task
+        # -----------------------------------------------------
         def generation_task(*, item, **kwargs):
             question = item.input["question"]
 
@@ -101,7 +140,7 @@ def main():
                 retriever=retriever,
                 model=model,
                 tokenizer=tokenizer,
-                max_new_tokens=config["generation"]["max_new_tokens"],
+                max_new_tokens=max_new_tokens,
             )
 
             retrieved_articles = sorted(
@@ -120,6 +159,9 @@ def main():
                 "escaped": result["escaped"],
             }
 
+        # -----------------------------------------------------
+        # 5. Retrieval article-hit evaluator
+        # -----------------------------------------------------
         def article_hit_evaluator(
             *, output, expected_output, **kwargs
         ):
@@ -133,37 +175,93 @@ def main():
                 name="article_hit",
                 value=1.0 if hit else 0.0,
                 comment=(
-                    f"Expected: {sorted(expected)}; "
-                    f"Retrieved: {sorted(retrieved)}"
+                    f"Expected articles: {sorted(expected)}; "
+                    f"Retrieved articles: {sorted(retrieved)}"
                 ),
             )
 
-        # Important: run_experiment executes the dataset items.
-        # This implementation uses max_items only if the Langfuse SDK
-        # supports passing a subset of dataset items to run_experiment.
-        # Otherwise, it runs the entire dataset.
+        # -----------------------------------------------------
+        # 6. Local test mode: execute only selected items
+        # -----------------------------------------------------
         if args.max_items is not None:
+            hits = 0
+            misses = 0
+
+            for index, item in enumerate(items, start=1):
+                print(f"\nQuestion {index}/{len(items)}")
+
+                output = generation_task(item=item)
+                expected_output = item.expected_output
+
+                evaluation = article_hit_evaluator(
+                    output=output,
+                    expected_output=expected_output,
+                )
+
+                if evaluation.value == 1.0:
+                    hits += 1
+                else:
+                    misses += 1
+
+                print("\nQuestion:")
+                print(output["question"])
+
+                print("\nGenerated answer:")
+                print(output["answer"])
+
+                print("\nExpected articles:")
+                print(expected_output.get("articles", []))
+
+                print("\nRetrieved articles:")
+                print(output["retrieved_articles"])
+
+                print("\nArticle hit:")
+                print(evaluation.value)
+
+                print("\nSources:")
+                for source in output["sources"]:
+                    print(source)
+
+                if output["escaped"]:
+                    print("\nEscaped:", output["escaped"])
+
+                print("-" * 60)
+
+            total = hits + misses
+            score = hits / total if total else 0.0
+
+            print("\nLOCAL TEST SUMMARY")
+            print(f"Questions evaluated: {total}")
+            print(f"Article hits: {hits}")
+            print(f"Article misses: {misses}")
+            print(f"Article hit rate: {score:.3f}")
             print(
-                f"Requested item limit: {args.max_items}. "
-                "The dataset may still run in full depending on "
-                "your Langfuse SDK's run_experiment API."
+                "\nNo Langfuse experiment was created. "
+                "This was a local test only."
             )
 
-        experiment_kwargs = {
-            "name": "Generation evaluation",
-            "description": (
-                "Evaluate RAG generation and expected article retrieval. "
-                f"Dataset: {args.dataset}."
+            return
+
+        # -----------------------------------------------------
+        # 7. Full dataset experiment in Langfuse
+        # -----------------------------------------------------
+        result = dataset.run_experiment(
+            name="Generation evaluation",
+            description=(
+                "Evaluate generated answers and whether expected "
+                "articles appear among retrieved sources. "
+                f"Dataset: {args.dataset}. "
+                f"Max new tokens: {max_new_tokens}."
             ),
-            "task": generation_task,
-            "evaluators": [article_hit_evaluator],
-        }
+            task=generation_task,
+            evaluators=[article_hit_evaluator],
+        )
 
-        result = dataset.run_experiment(**experiment_kwargs)
-
+        print("\nEXPERIMENT RESULTS")
         print(result.format())
 
         experiment_url = getattr(result, "experiment_url", None)
+
         if experiment_url:
             print("Experiment:", experiment_url)
 
