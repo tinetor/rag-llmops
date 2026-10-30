@@ -62,7 +62,12 @@ def parse_args():
         "--max-items",
         type=int,
         default=None,
-        help="Run a local test on the first N dataset items without creating a Langfuse experiment.",
+        help="Limit the number of dataset items evaluated.",
+    )
+    parser.add_argument(
+        "--no-experiment",
+        action="store_true",
+        help="Run locally without creating a Langfuse experiment.",
     )
 
     args = parser.parse_args()
@@ -91,7 +96,7 @@ def main():
         config = load_config()
         retrieval_config = config["retrieval"]
 
-        # Match the Qdrant path used by evaluate.retrieval.py.
+        # Use the same Qdrant path as evaluate.retrieval.py.
         persist_dir = config["index"]["persist_dir"] + "_qdrant"
         collection_name = config["index"]["collection_name"]
 
@@ -104,8 +109,6 @@ def main():
             if args.max_new_tokens is not None
             else config["generation"]["max_new_tokens"]
         )
-
-        # Preserve the configured generation parameters, with an optional CLI override.
         config["generation"]["max_new_tokens"] = max_new_tokens
 
         dataset = langfuse.get_dataset(args.dataset)
@@ -123,18 +126,21 @@ def main():
         print(f"Available items: {len(dataset.items)}")
         print(f"Items selected: {len(items)}")
         print(f"Retrieval mode: {mode}")
-        print(f"Chapter routing: {'enabled' if args.route else 'disabled'}")
+        print(
+            f"Chapter routing: "
+            f"{'enabled' if args.route else 'disabled'}"
+        )
         print(f"Max new tokens: {max_new_tokens}")
         print(
             "Execution mode: "
             + (
                 "LOCAL TEST (no Langfuse experiment)"
-                if args.max_items is not None
-                else "FULL LANGFUSE EXPERIMENT"
+                if args.no_experiment
+                else "LANGFUSE EXPERIMENT"
             )
         )
 
-        # Load the model once for the entire evaluation.
+        # Load model once.
         model, tokenizer = load_llm(config)
 
         if args.route:
@@ -168,52 +174,34 @@ def main():
                 )
                 chapters = [chapter for chapter, _ in routed]
 
+                retriever_kwargs = {
+                    "index": index,
+                    "persist_dir": persist_dir,
+                    "collection_name": collection_name,
+                    "k": top_k,
+                    "mode": mode,
+                    "candidate_k": candidate_k,
+                }
                 if chapters:
-                    question_retriever = build_retriever(
-                        index=index,
-                        persist_dir=persist_dir,
-                        collection_name=collection_name,
-                        k=top_k,
-                        mode=mode,
-                        candidate_k=candidate_k,
-                        chapter=chapters,
-                    )
-                else:
-                    question_retriever = build_retriever(
-                        index=index,
-                        persist_dir=persist_dir,
-                        collection_name=collection_name,
-                        k=top_k,
-                        mode=mode,
-                        candidate_k=candidate_k,
-                    )
+                    retriever_kwargs["chapter"] = chapters
 
-                # Use the same retrieval helper as the retrieval evaluation.
-                chunks = retrieve(question_retriever, question)
-
-                # Generate using the same retrieved chunks so that the
-                # routed retrieval result is also the generation context.
-                result = generate_answer(
-                    question=question,
-                    retriever=question_retriever,
-                    model=model,
-                    tokenizer=tokenizer,
-                    max_new_tokens=max_new_tokens,
-                )
+                question_retriever = build_retriever(**retriever_kwargs)
             else:
-                result = generate_answer(
-                    question=question,
-                    retriever=retriever,
-                    model=model,
-                    tokenizer=tokenizer,
-                    max_new_tokens=max_new_tokens,
-                )
-                chunks = result["sources"]
+                question_retriever = retriever
 
+            result = generate_answer(
+                question=question,
+                retriever=question_retriever,
+                model=model,
+                tokenizer=tokenizer,
+                max_new_tokens=max_new_tokens,
+            )
+
+            sources = result["sources"]
             retrieved_articles = sorted(
                 {
                     str(source["article"])
-                    for source in chunks
+                    for source in sources
                     if source.get("article") is not None
                 }
             )
@@ -221,12 +209,15 @@ def main():
             return {
                 "question": question,
                 "answer": result["answer"],
+                "generated_answer": result["answer"],
                 "retrieved_articles": retrieved_articles,
-                "sources": chunks,
+                "sources": sources,
                 "escaped": result.get("escaped"),
             }
 
-        def article_hit_evaluator(*, output, expected_output, **kwargs):
+        def article_hit_evaluator(
+            *, output, expected_output, **kwargs
+        ):
             expected = set(
                 map(str, expected_output.get("articles", []))
             )
@@ -242,7 +233,7 @@ def main():
                 ),
             )
 
-        if args.max_items is not None:
+        if args.no_experiment:
             hits = 0
 
             for number, item in enumerate(items, start=1):
@@ -261,7 +252,7 @@ def main():
                 print("\nQuestion:")
                 print(output["question"])
                 print("\nGenerated answer:")
-                print(output["answer"])
+                print(output["generated_answer"])
                 print("\nExpected articles:")
                 print(expected_output.get("articles", []))
                 print("\nRetrieved articles:")
@@ -271,16 +262,42 @@ def main():
                 if output["escaped"]:
                     print("\nEscaped:", output["escaped"])
 
+            total = len(items)
             print(f"\n{'=' * 60}")
             print("LOCAL TEST SUMMARY")
-            print(f"Questions evaluated: {len(items)}")
+            print(f"Questions evaluated: {total}")
             print(f"Article hits: {hits}")
-            print(f"Article misses: {len(items) - hits}")
-            print(f"Article hit rate: {hits / len(items):.3f}")
+            print(f"Article misses: {total - hits}")
+            print(f"Article hit rate: {hits / total:.3f}")
             print("No Langfuse experiment was created.")
 
         else:
-            result = dataset.run_experiment(
+            # Create a temporary Langfuse dataset containing only the
+            # selected items when --max-items is used. This prevents
+            # accidentally running the full dataset.
+            experiment_dataset = dataset
+
+            if args.max_items is not None:
+                temporary_name = (
+                    f"{args.dataset}_generation_subset_"
+                    f"{args.max_items}"
+                )
+                experiment_dataset = langfuse.create_dataset(
+                    name=temporary_name,
+                    description=(
+                        f"Temporary subset for generation evaluation "
+                        f"from {args.dataset}; first {len(items)} items."
+                    ),
+                )
+
+                for item in items:
+                    experiment_dataset.create_item(
+                        input=item.input,
+                        expected_output=item.expected_output,
+                        metadata=getattr(item, "metadata", None),
+                    )
+
+            result = experiment_dataset.run_experiment(
                 name=(
                     f"Generation routed - top {args.top_chapters} chapters"
                     if args.route
@@ -290,13 +307,15 @@ def main():
                     "Evaluate generated answers and expected article "
                     "retrieval. Chapter routing is "
                     f"{'enabled' if args.route else 'disabled'}. "
-                    f"Dataset: {args.dataset}. "
+                    f"Source dataset: {args.dataset}. "
+                    f"Items selected: {len(items)}. "
                     f"Max new tokens: {max_new_tokens}."
                 ),
                 task=generation_task,
                 evaluators=[article_hit_evaluator],
             )
 
+            print("\nEXPERIMENT RESULTS")
             print(result.format())
 
             if getattr(result, "experiment_url", None):
