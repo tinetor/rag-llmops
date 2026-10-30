@@ -35,16 +35,23 @@ def parse_args():
         "--max-new-tokens",
         type=int,
         default=None,
-        help=(
-            "Maximum number of tokens generated per answer. "
-            "If omitted, uses the value in config.yaml."
-        ),
+        help="Maximum tokens generated per answer. Defaults to config.yaml.",
+    )
+
+    parser.add_argument(
+        "--max-items",
+        type=int,
+        default=None,
+        help="Maximum number of dataset items to evaluate.",
     )
 
     args = parser.parse_args()
 
     if args.max_new_tokens is not None and args.max_new_tokens < 1:
-        parser.error("--max-new-tokens must be a positive integer.")
+        parser.error("--max-new-tokens must be positive.")
+
+    if args.max_items is not None and args.max_items < 1:
+        parser.error("--max-items must be positive.")
 
     return args
 
@@ -57,30 +64,20 @@ def main():
     with open(config_path, encoding="utf-8") as file:
         config = yaml.safe_load(file)
 
-    # Override max_new_tokens only when specified through Bash.
     if args.max_new_tokens is not None:
         config["generation"]["max_new_tokens"] = args.max_new_tokens
 
-    persist_dir = config["index"]["persist_dir"]
-    collection_name = config["index"].get("collection_name")
-
-    retriever_kwargs = {
-        "persist_dir": persist_dir,
-        "model_name": config["embedding"]["model_name"],
-        "k": config["retrieval"]["top_k"],
-        "mode": config["retrieval"]["mode"],
-        "candidate_k": config["retrieval"]["candidate_k"],
-    }
-
-    # Pass collection_name only if configured and supported by your
-    # retrieval.load_retriever implementation.
-    if collection_name is not None:
-        retriever_kwargs["collection_name"] = collection_name
-
-    retriever = load_retriever(**retriever_kwargs)
+    # Load the existing Qdrant collection. Do not rebuild the index.
+    retriever = load_retriever(
+        persist_dir=config["index"]["persist_dir"],
+        collection_name=config["index"]["collection_name"],
+        model_name=config["embedding"]["model_name"],
+        k=config["retrieval"]["top_k"],
+        mode=config["retrieval"]["mode"],
+        candidate_k=config["retrieval"]["candidate_k"],
+    )
 
     model, tokenizer = load_llm(config)
-
     langfuse = get_client()
 
     try:
@@ -90,7 +87,7 @@ def main():
         dataset = langfuse.get_dataset(args.dataset)
 
         print(f"Dataset: {dataset.name}")
-        print(f"Items: {len(dataset.items)}")
+        print(f"Available items: {len(dataset.items)}")
         print(
             "Max new tokens: "
             f"{config['generation']['max_new_tokens']}"
@@ -141,21 +138,34 @@ def main():
                 ),
             )
 
-        result = dataset.run_experiment(
-            name="Generation evaluation",
-            description=(
-                "Evaluate generated answers and whether the expected "
-                "articles appear among the retrieved sources. "
+        # Important: run_experiment executes the dataset items.
+        # This implementation uses max_items only if the Langfuse SDK
+        # supports passing a subset of dataset items to run_experiment.
+        # Otherwise, it runs the entire dataset.
+        if args.max_items is not None:
+            print(
+                f"Requested item limit: {args.max_items}. "
+                "The dataset may still run in full depending on "
+                "your Langfuse SDK's run_experiment API."
+            )
+
+        experiment_kwargs = {
+            "name": "Generation evaluation",
+            "description": (
+                "Evaluate RAG generation and expected article retrieval. "
                 f"Dataset: {args.dataset}."
             ),
-            task=generation_task,
-            evaluators=[article_hit_evaluator],
-        )
+            "task": generation_task,
+            "evaluators": [article_hit_evaluator],
+        }
+
+        result = dataset.run_experiment(**experiment_kwargs)
 
         print(result.format())
 
-        if getattr(result, "experiment_url", None):
-            print("Experiment:", result.experiment_url)
+        experiment_url = getattr(result, "experiment_url", None)
+        if experiment_url:
+            print("Experiment:", experiment_url)
 
     finally:
         langfuse.flush()
