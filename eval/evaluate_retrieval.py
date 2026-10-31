@@ -1,4 +1,3 @@
-
 """Evaluate article retrieval using a Langfuse dataset experiment."""
 
 import argparse
@@ -11,7 +10,8 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from langfuse import Evaluation, get_client
+from langfuse import get_client
+from metrics import article_hit_evaluator
 from config import load_config
 from retrieval import (
     load_retriever,
@@ -158,20 +158,6 @@ def main():
                 "retrieved_articles": articles,
                 "chunks": chunks,
             }
-
-        def article_hit_evaluator(*, output, expected_output, **kwargs):
-            expected = set(map(str, expected_output["articles"]))
-            retrieved = set(output["retrieved_articles"])
-            hit = bool(expected & retrieved)
-
-            return Evaluation(
-                name="article_hit",
-                value=1.0 if hit else 0.0,
-                comment=(
-                    f"Expected: {sorted(expected)}; "
-                    f"Retrieved: {sorted(retrieved)}"
-                ),
-            )
 
         result = dataset.run_experiment(
             name=experiment_name,
