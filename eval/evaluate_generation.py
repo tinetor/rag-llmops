@@ -11,7 +11,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from langfuse import get_client
-from metrics import article_hit_evaluator
+from metrics import article_hit_evaluator, article_recall_evaluator
 from config import load_config
 from generation import generate_answer
 from llm import load_llm
@@ -294,7 +294,7 @@ def main():
                     f"Max new tokens: {max_new_tokens}."
                 ),
                 task=generation_task,
-                evaluators=[article_hit_evaluator],
+                evaluators=[article_hit_evaluator, article_recall_evaluator],
             )
 
             print("\nEXPERIMENT RESULTS")

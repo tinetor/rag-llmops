@@ -11,7 +11,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from langfuse import get_client
-from metrics import article_hit_evaluator
+from metrics import article_hit_evaluator, article_recall_evaluator
 from config import load_config
 from retrieval import (
     load_retriever,
@@ -168,7 +168,7 @@ def main():
                 f"Dataset: {args.dataset}."
             ),
             task=retrieval_task,
-            evaluators=[article_hit_evaluator],
+            evaluators=[article_hit_evaluator, article_recall_evaluator],
         )
 
         print(result.format())
