@@ -1,4 +1,3 @@
-
 import torch
 from langfuse import get_client
 
@@ -54,7 +53,7 @@ def generate_answer(
         # 3. Generate the answer with Hugging Face
         with langfuse.start_as_current_observation(
             as_type="generation",
-            name='generate-answer',
+            name="generate-answer",
             model=model_name,
             input={"prompt": chat},
             model_parameters={
@@ -102,7 +101,19 @@ def generate_answer(
 
 
 if __name__ == "__main__":
+    import argparse
     from config import load_config
+
+    parser = argparse.ArgumentParser(
+        description="Run a single RAG question with Qwen."
+    )
+    parser.add_argument(
+        "--question",
+        type=str,
+        required=True,
+        help="Question to ask the RAG pipeline.",
+    )
+    args = parser.parse_args()
 
     config = load_config()
 
@@ -117,7 +128,7 @@ if __name__ == "__main__":
     model, tokenizer = load_llm(config)
     max_new_tokens = config["generation"]["max_new_tokens"]
 
-    question = "What are the prohibited AI practices?"
+    question = args.question
 
     result = generate_answer(
         question=question,
