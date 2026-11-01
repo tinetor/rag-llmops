@@ -5,7 +5,13 @@ from langfuse import get_client
 
 from llm import load_llm
 from prompts import ESCAPE_PHRASE, build_prompt
-from retrieval import load_retriever, retrieve
+from retrieval import (
+    load_retriever,
+    retrieve,
+    load_index,
+    route_chapters,
+    build_retriever,
+)
 
 
 def generate_answer(
@@ -14,6 +20,15 @@ def generate_answer(
     model,
     tokenizer,
     max_new_tokens: int,
+    use_router: bool = False,
+    index=None,
+    persist_dir: str = None,
+    collection_name: str = None,
+    embedding_model_name: str = None,
+    top_chapters: int = 2,
+    route_pool: int = 30,
+    retrieval_mode: str = "dense",
+    candidate_k: int = 20,
 ) -> dict:
     langfuse = get_client()
     model_name = getattr(model.config, "_name_or_path", "unknown")
@@ -24,13 +39,66 @@ def generate_answer(
         input={"question": question},
     ) as trace:
 
-        # 1. Retrieve relevant chunks
+        # 1. Optionally route to the most relevant chapters
+        if use_router:
+            if index is None:
+                raise ValueError(
+                    "An index is required when use_router=True."
+                )
+
+            with langfuse.start_as_current_observation(
+                as_type="span",
+                name="chapter-routing",
+                input={"question": question},
+            ) as routing_span:
+                routed = route_chapters(
+                    index=index,
+                    query=question,
+                    top_n=top_chapters,
+                    pool=route_pool,
+                )
+                chapters = [chapter for chapter, _ in routed]
+
+                routing_span.update(
+                    output={
+                        "selected_chapters": chapters,
+                        "routing_results": [
+                            {"chapter": chapter, "score": score}
+                            for chapter, score in routed
+                        ],
+                    }
+                )
+
+            retriever_kwargs = {
+                "index": index,
+                "persist_dir": persist_dir,
+                "collection_name": collection_name,
+                "k": retriever.k if hasattr(retriever, "k") else None,
+                "mode": retrieval_mode,
+                "candidate_k": candidate_k,
+            }
+
+            # Avoid passing k=None if the retriever does not expose k.
+            if retriever_kwargs["k"] is None:
+                retriever_kwargs["k"] = 5
+
+            if chapters:
+                retriever_kwargs["chapter"] = chapters
+
+            question_retriever = build_retriever(**retriever_kwargs)
+        else:
+            question_retriever = retriever
+
+        # 2. Retrieve relevant chunks
         with langfuse.start_as_current_observation(
             as_type="span",
             name="retrieval",
-            input={"question": question},
+            input={
+                "question": question,
+                "use_router": use_router,
+            },
         ) as retrieval_span:
-            passages = retrieve(retriever, question)
+            passages = retrieve(question_retriever, question)
 
             retrieval_span.update(
                 output={
@@ -39,7 +107,7 @@ def generate_answer(
                 }
             )
 
-        # 2. Build the prompt with the retrieved context
+        # 3. Build the prompt with the retrieved context
         prompt = build_prompt(question, passages)
 
         chat = tokenizer.apply_chat_template(
@@ -52,7 +120,7 @@ def generate_answer(
         device = next(model.parameters()).device
         inputs = inputs.to(device)
 
-        # 3. Generate the answer with Hugging Face
+        # 4. Generate the answer with Hugging Face
         with langfuse.start_as_current_observation(
             as_type="generation",
             name="generate-answer",
@@ -91,7 +159,7 @@ def generate_answer(
             "escaped": ESCAPE_PHRASE in answer,
         }
 
-        # 4. Record the final pipeline output
+        # 5. Record the final pipeline output
         trace.update(
             output={
                 "answer": result["answer"],
@@ -118,18 +186,36 @@ if __name__ == "__main__":
     question = args.question
 
     config = load_config()
+    retrieval_config = config["retrieval"]
 
     persist_dir = config["index"]["persist_dir"] + "_qdrant"
     collection_name = config["index"]["collection_name"]
-    
-    retriever = load_retriever(
-        persist_dir=persist_dir,
-        collection_name=collection_name,
-        model_name=config["embedding"]["model_name"],
-        k=config["retrieval"]["top_k"],
-        mode=config["retrieval"]["mode"],
-        candidate_k=config["retrieval"]["candidate_k"],
-    )
+    embedding_model_name = config["embedding"]["model_name"]
+
+    use_router = retrieval_config.get("use_router", False)
+    top_k = retrieval_config["top_k"]
+    candidate_k = retrieval_config["candidate_k"]
+    mode = retrieval_config["mode"]
+    top_chapters = retrieval_config.get("top_chapters", 2)
+    route_pool = retrieval_config.get("route_pool", 30)
+
+    if use_router:
+        index = load_index(
+            persist_dir=persist_dir,
+            collection_name=collection_name,
+            model_name=embedding_model_name,
+        )
+        retriever = None
+    else:
+        index = None
+        retriever = load_retriever(
+            persist_dir=persist_dir,
+            collection_name=collection_name,
+            model_name=embedding_model_name,
+            k=top_k,
+            mode=mode,
+            candidate_k=candidate_k,
+        )
 
     model, tokenizer = load_llm(config)
     max_new_tokens = config["generation"]["max_new_tokens"]
@@ -140,6 +226,15 @@ if __name__ == "__main__":
         model=model,
         tokenizer=tokenizer,
         max_new_tokens=max_new_tokens,
+        use_router=use_router,
+        index=index,
+        persist_dir=persist_dir,
+        collection_name=collection_name,
+        embedding_model_name=embedding_model_name,
+        top_chapters=top_chapters,
+        route_pool=route_pool,
+        retrieval_mode=mode,
+        candidate_k=candidate_k,
     )
 
     # Ensure pending traces are sent before the script exits
