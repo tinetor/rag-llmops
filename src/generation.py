@@ -119,6 +119,7 @@ if __name__ == "__main__":
 
     retriever = load_retriever(
         persist_dir=config["index"]["persist_dir"],
+        collection_name=config["index"]["collection_name"],
         model_name=config["embedding"]["model_name"],
         k=config["retrieval"]["top_k"],
         mode=config["retrieval"]["mode"],
