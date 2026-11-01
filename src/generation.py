@@ -1,3 +1,5 @@
+
+import argparse
 import torch
 from langfuse import get_client
 
@@ -101,11 +103,10 @@ def generate_answer(
 
 
 if __name__ == "__main__":
-    import argparse
     from config import load_config
 
     parser = argparse.ArgumentParser(
-        description="Run a single RAG question with Qwen."
+        description="Run the RAG pipeline with a custom question."
     )
     parser.add_argument(
         "--question",
@@ -114,12 +115,12 @@ if __name__ == "__main__":
         help="Question to ask the RAG pipeline.",
     )
     args = parser.parse_args()
+    question = args.question
 
     config = load_config()
 
     retriever = load_retriever(
         persist_dir=config["index"]["persist_dir"],
-        collection_name=config["index"]["collection_name"],
         model_name=config["embedding"]["model_name"],
         k=config["retrieval"]["top_k"],
         mode=config["retrieval"]["mode"],
@@ -128,8 +129,6 @@ if __name__ == "__main__":
 
     model, tokenizer = load_llm(config)
     max_new_tokens = config["generation"]["max_new_tokens"]
-
-    question = args.question
 
     result = generate_answer(
         question=question,
