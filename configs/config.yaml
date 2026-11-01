@@ -13,6 +13,9 @@ retrieval:
   top_k: 8
   mode: hybrid
   candidate_k: 15
+  use_router: True
+  top_chapters: 2
+  route_pool: 30
 
 index:
   persist_dir: ./storage
