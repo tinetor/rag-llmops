@@ -22,6 +22,6 @@ index:
   collection_name: eu_ai_act
 
 generation:
-  model_name: "Qwen/Qwen2.5-3B-Instruct"
-  quantization: "int4"
+  model_name: "Qwen/Qwen2.5-0.5B-Instruct"
+  quantization: none
   max_new_tokens: 512
