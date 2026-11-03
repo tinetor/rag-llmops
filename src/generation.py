@@ -1,9 +1,7 @@
-
 import argparse
-import torch
 from langfuse import get_client
 
-from llm import load_llm
+from llm import load_llm, generate_text, get_model_name
 from prompts import ESCAPE_PHRASE, build_prompt
 from retrieval import (
     load_retriever,
@@ -31,7 +29,7 @@ def generate_answer(
     candidate_k: int = 20,
 ) -> dict:
     langfuse = get_client()
-    model_name = getattr(model.config, "_name_or_path", "unknown")
+    model_name = get_model_name(model)
 
     with langfuse.start_as_current_observation(
         as_type="span",
@@ -110,46 +108,31 @@ def generate_answer(
         # 3. Build the prompt with the retrieved context
         prompt = build_prompt(question, passages)
 
-        chat = tokenizer.apply_chat_template(
-            [{"role": "user", "content": prompt}],
-            tokenize=False,
-            add_generation_prompt=True,
-        )
-
-        inputs = tokenizer(chat, return_tensors="pt")
-        device = next(model.parameters()).device
-        inputs = inputs.to(device)
-
         # 4. Generate the answer with Hugging Face
         with langfuse.start_as_current_observation(
             as_type="generation",
             name="generate-answer",
             model=model_name,
-            input={"prompt": chat},
+            input={"prompt": prompt},
             model_parameters={
                 "max_new_tokens": max_new_tokens,
                 "do_sample": False,
             },
         ) as generation:
-            with torch.inference_mode():
-                output_ids = model.generate(
-                    **inputs,
-                    max_new_tokens=max_new_tokens,
-                    do_sample=False,
-                )
-
-            new_tokens = output_ids[0][inputs["input_ids"].shape[1]:]
-
-            answer = tokenizer.decode(
-                new_tokens,
-                skip_special_tokens=True,
-            ).strip()
+            generated = generate_text(
+                model=model,
+                tokenizer=tokenizer,
+                prompt=prompt,
+                max_new_tokens=max_new_tokens,
+            )
+            answer = generated["answer"]
 
             generation.update(
+                input={"prompt": generated["chat"]},
                 output=answer,
                 usage_details={
-                    "input": inputs["input_ids"].shape[1],
-                    "output": len(new_tokens),
+                    "input": generated["input_tokens"],
+                    "output": generated["output_tokens"],
                 },
             )
 
