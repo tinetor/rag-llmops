@@ -1,3 +1,4 @@
+```python
 import argparse
 from langfuse import get_client
 
@@ -23,6 +24,7 @@ def generate_answer(
     persist_dir: str = None,
     collection_name: str = None,
     embedding_model_name: str = None,
+    top_k: int = 5,
     top_chapters: int = 2,
     route_pool: int = 30,
     retrieval_mode: str = "dense",
@@ -49,12 +51,14 @@ def generate_answer(
                 name="chapter-routing",
                 input={"question": question},
             ) as routing_span:
+
                 routed = route_chapters(
                     index=index,
                     query=question,
                     top_n=top_chapters,
                     pool=route_pool,
                 )
+
                 chapters = [chapter for chapter, _ in routed]
 
                 routing_span.update(
@@ -67,23 +71,23 @@ def generate_answer(
                     }
                 )
 
+            # Build retriever using the configured top_k
             retriever_kwargs = {
                 "index": index,
                 "persist_dir": persist_dir,
                 "collection_name": collection_name,
-                "k": retriever.k if hasattr(retriever, "k") else None,
+                "k": top_k,
                 "mode": retrieval_mode,
                 "candidate_k": candidate_k,
             }
 
-            # Avoid passing k=None if the retriever does not expose k.
-            if retriever_kwargs["k"] is None:
-                retriever_kwargs["k"] = 5
-
             if chapters:
                 retriever_kwargs["chapter"] = chapters
 
-            question_retriever = build_retriever(**retriever_kwargs)
+            question_retriever = build_retriever(
+                **retriever_kwargs
+            )
+
         else:
             question_retriever = retriever
 
@@ -94,9 +98,15 @@ def generate_answer(
             input={
                 "question": question,
                 "use_router": use_router,
+                "top_k": top_k,
+                "candidate_k": candidate_k,
             },
         ) as retrieval_span:
-            passages = retrieve(question_retriever, question)
+
+            passages = retrieve(
+                question_retriever,
+                question,
+            )
 
             retrieval_span.update(
                 output={
@@ -119,12 +129,14 @@ def generate_answer(
                 "do_sample": False,
             },
         ) as generation:
+
             generated = generate_text(
                 model=model,
                 tokenizer=tokenizer,
                 prompt=prompt,
                 max_new_tokens=max_new_tokens,
             )
+
             answer = generated["answer"]
 
             generation.update(
@@ -159,12 +171,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Run the RAG pipeline with a custom question."
     )
+
     parser.add_argument(
         "--question",
         type=str,
         required=True,
         help="Question to ask the RAG pipeline.",
     )
+
     args = parser.parse_args()
     question = args.question
 
@@ -178,69 +192,4 @@ if __name__ == "__main__":
     use_router = retrieval_config.get("use_router", False)
     top_k = retrieval_config["top_k"]
     candidate_k = retrieval_config["candidate_k"]
-    mode = retrieval_config["mode"]
-    top_chapters = retrieval_config.get("top_chapters", 2)
-    route_pool = retrieval_config.get("route_pool", 30)
-
-    if use_router:
-        index = load_index(
-            persist_dir=persist_dir,
-            collection_name=collection_name,
-            model_name=embedding_model_name,
-        )
-        retriever = None
-    else:
-        index = None
-        retriever = load_retriever(
-            persist_dir=persist_dir,
-            collection_name=collection_name,
-            model_name=embedding_model_name,
-            k=top_k,
-            mode=mode,
-            candidate_k=candidate_k,
-        )
-
-    model, tokenizer = load_llm(config)
-    max_new_tokens = config["generation"]["max_new_tokens"]
-
-    result = generate_answer(
-        question=question,
-        retriever=retriever,
-        model=model,
-        tokenizer=tokenizer,
-        max_new_tokens=max_new_tokens,
-        use_router=use_router,
-        index=index,
-        persist_dir=persist_dir,
-        collection_name=collection_name,
-        embedding_model_name=embedding_model_name,
-        top_chapters=top_chapters,
-        route_pool=route_pool,
-        retrieval_mode=mode,
-        candidate_k=candidate_k,
-    )
-
-    # Ensure pending traces are sent before the script exits
-    langfuse = get_client()
-    langfuse.flush()
-
-    print(f"Q: {question}\n")
-    print(f"A: {result['answer']}\n")
-    print(f"Escaped: {result['escaped']}")
-    print("Sources:")
-
-    for source in result["sources"]:
-        score = (
-            f"{source['score']:.3f}"
-            if source["score"] is not None
-            else "N/A"
-        )
-        article = source["article"]
-        article_label = (
-            f"Article {article}"
-            if article is not None
-            else "Article unknown"
-        )
-
-        print(f"  [{score}] {article_label}")
-        print(f"    {source['text'][:120]!r}")
+    mode = retrieval
