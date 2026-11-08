@@ -1,4 +1,3 @@
-```python
 import argparse
 from langfuse import get_client
 
