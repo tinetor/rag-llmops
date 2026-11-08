@@ -1,4 +1,3 @@
-import argparse
 from langfuse import get_client
 
 from llm import load_llm, generate_text, get_model_name
@@ -162,33 +161,3 @@ def generate_answer(
         )
 
     return result
-
-
-if __name__ == "__main__":
-    from config import load_config
-
-    parser = argparse.ArgumentParser(
-        description="Run the RAG pipeline with a custom question."
-    )
-
-    parser.add_argument(
-        "--question",
-        type=str,
-        required=True,
-        help="Question to ask the RAG pipeline.",
-    )
-
-    args = parser.parse_args()
-    question = args.question
-
-    config = load_config()
-    retrieval_config = config["retrieval"]
-
-    persist_dir = config["index"]["persist_dir"] + "_qdrant"
-    collection_name = config["index"]["collection_name"]
-    embedding_model_name = config["embedding"]["model_name"]
-
-    use_router = retrieval_config.get("use_router", False)
-    top_k = retrieval_config["top_k"]
-    candidate_k = retrieval_config["candidate_k"]
-    mode = retrieval
