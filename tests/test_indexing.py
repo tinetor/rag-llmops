@@ -1,9 +1,12 @@
-"""Tests for indexing: checks that building the FAISS index via LlamaIndex
-preserves every node and uses the correct embedding dimension."""
+"""Tests for indexing with Qdrant."""
 
+import pytest
 from llama_index.core.schema import TextNode
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 
+from config import load_config
 from indexing import build_index
+
 
 SAMPLE_NODES = [
     TextNode(text="The quick brown fox jumps over the lazy dog."),
@@ -12,13 +15,41 @@ SAMPLE_NODES = [
 ]
 
 
-def test_no_nodes_lost():
-    index = build_index(SAMPLE_NODES)
-    assert index.vector_store.client.ntotal == len(SAMPLE_NODES)
+@pytest.fixture
+def config():
+    return load_config()
 
 
-def test_embedding_dimension_matches_model():
-    index = build_index(SAMPLE_NODES)
-    # all-MiniLM-L6-v2's known output size -- not recalculated here on purpose,
-    # so the test catches indexing.py passing the wrong dimension to FAISS
-    assert index.vector_store.client.d == 384
+@pytest.fixture
+def index(tmp_path, config):
+    return build_index(
+        nodes=SAMPLE_NODES,
+        model_name=config["embedding"]["model_name"],
+        persist_dir=str(tmp_path / "qdrant"),
+        collection_name="test_collection",
+    )
+
+
+def test_no_nodes_lost(index):
+    stored_count = index.vector_store.client.count(
+        collection_name="test_collection"
+    ).count
+
+    assert stored_count == len(SAMPLE_NODES)
+
+
+def test_embedding_dimension_matches_model(index, config):
+    collection = index.vector_store.client.get_collection(
+        collection_name="test_collection"
+    )
+
+    stored_dimension = collection.config.params.vectors.size
+
+    embedding_model = HuggingFaceEmbedding(
+        model_name=config["embedding"]["model_name"]
+    )
+    expected_dimension = len(
+        embedding_model.get_text_embedding("Embedding dimension verification.")
+    )
+
+    assert stored_dimension == expected_dimension

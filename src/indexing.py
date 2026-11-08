@@ -9,10 +9,14 @@ from llama_index.vector_stores.qdrant import QdrantVectorStore
 
 def build_index(
     nodes,
-    model_name: str = "sentence-transformers/all-MiniLM-L6-v2",
+    model_name: str | None = None,
     persist_dir: str = "./storage_qdrant",
     collection_name: str = "eu_ai_act",
 ):
+    if model_name is None:
+        config = load_config()
+        model_name = config["embedding"]["model_name"]
+
     Path(persist_dir).mkdir(parents=True, exist_ok=True)
 
     embed_model = HuggingFaceEmbedding(model_name=model_name)
