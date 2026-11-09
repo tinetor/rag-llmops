@@ -21,7 +21,12 @@ index:
   persist_dir: ./storage
   collection_name: eu_ai_act
 
+
 generation:
-  model_name: "Qwen/Qwen2.5-0.5B-Instruct"
-  quantization: none
+  backend: http
+  model_name: Qwen/Qwen2.5-0.5B-Instruct
+  base_url: http://localhost:8000/v1
+  api_key: EMPTY
+  timeout: 120
+  max_retries: 2
   max_new_tokens: 512

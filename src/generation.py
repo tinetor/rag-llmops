@@ -1,6 +1,6 @@
 from langfuse import get_client
 
-from llm import load_llm, generate_text, get_model_name
+from llm import generate_text
 from prompts import ESCAPE_PHRASE, build_prompt
 from retrieval import (
     load_retriever,
@@ -17,6 +17,8 @@ def generate_answer(
     model,
     tokenizer,
     max_new_tokens: int,
+    backend: str = \"hf\",
+    model_name: str = None,
     use_router: bool = False,
     index=None,
     persist_dir: str = None,
@@ -29,7 +31,8 @@ def generate_answer(
     candidate_k: int = 20,
 ) -> dict:
     langfuse = get_client()
-    model_name = get_model_name(model)
+    if model_name is None:
+        raise ValueError("model_name must be provided.")
 
     with langfuse.start_as_current_observation(
         as_type="span",
@@ -133,6 +136,8 @@ def generate_answer(
                 tokenizer=tokenizer,
                 prompt=prompt,
                 max_new_tokens=max_new_tokens,
+                backend=backend,
+                model_name=model_name,
             )
 
             answer = generated["answer"]
