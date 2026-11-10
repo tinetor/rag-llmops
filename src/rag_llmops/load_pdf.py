@@ -6,8 +6,6 @@ def load_pdf(pdf):
     return raw_text
 
 
-
-
 if __name__ == "__main__":
     result = load_pdf("data/ai_act.pdf")
     print(len(result), "documentos")

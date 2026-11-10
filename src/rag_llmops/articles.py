@@ -2,8 +2,8 @@
 import re
 from copy import copy
 
-from config import load_config
-from load_pdf import load_pdf
+from rag_llmops.config import load_config
+from rag_llmops.load_pdf import load_pdf
 
 
 # Match article headings that appear on a line by themselves,

@@ -1,13 +1,9 @@
 """Command-line entry point for the RAG application."""
 
 import argparse
-import sys
-from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
-sys.path.insert(0, str(ROOT / "src"))
 
-from rag_pipeline import run_rag
+from rag_llmops.rag_pipeline import run_rag
 
 
 def main():

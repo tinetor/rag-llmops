@@ -4,8 +4,8 @@ import pytest
 from llama_index.core.schema import TextNode
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 
-from config import load_config
-from indexing import build_index
+from rag_llmops.config import load_config
+from rag_llmops.indexing import build_index
 
 
 SAMPLE_NODES = [

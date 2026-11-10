@@ -10,10 +10,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "src"))
 
-from config import load_config
-from load_pdf import load_pdf
+from rag_llmops.config import load_config
+from rag_llmops.load_pdf import load_pdf
 
 
 def main():

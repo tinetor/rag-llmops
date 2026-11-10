@@ -1,12 +1,7 @@
 """Entry point for document ingestion."""
 
-import sys
-from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
-sys.path.insert(0, str(ROOT / "src"))
-
-from ingestion_pipeline import run_ingestion
+from rag_llmops.ingestion_pipeline import run_ingestion
 
 
 def main():

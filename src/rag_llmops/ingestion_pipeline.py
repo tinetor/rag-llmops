@@ -1,9 +1,9 @@
 """Orchestrate the document ingestion pipeline."""
 
-from config import load_config
-from load_pdf import load_pdf
-from chunking import chunking
-from indexing import build_index
+from rag_llmops.config import load_config
+from rag_llmops.load_pdf import load_pdf
+from rag_llmops.chunking import chunking
+from rag_llmops.indexing import build_index
 
 
 def run_ingestion(config_path="configs/config.yaml"):

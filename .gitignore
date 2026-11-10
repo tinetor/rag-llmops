@@ -15,3 +15,8 @@ storage/
 storage_qdrant/
 *.faiss
 scratch/
+
+# Packaging artifacts
+*.egg-info/
+build/
+dist/

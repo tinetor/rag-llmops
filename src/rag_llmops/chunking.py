@@ -306,8 +306,8 @@ def chunking(
 
 
 if __name__ == "__main__":
-    from config import load_config
-    from load_pdf import load_pdf
+    from rag_llmops.config import load_config
+    from rag_llmops.load_pdf import load_pdf
 
     config = load_config()
     docs = load_pdf(config["data"]["pdf_path"])

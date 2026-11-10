@@ -2,7 +2,7 @@
 
 import pytest
 
-from load_pdf import load_pdf
+from rag_llmops.load_pdf import load_pdf
 
 PDF_PATH = "data/ai_act.pdf"
 MIN_CHARS_PER_PAGE = 100

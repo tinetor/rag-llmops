@@ -1,8 +1,8 @@
 from langfuse import get_client
 
-from llm import generate_text
-from prompts import ESCAPE_PHRASE, build_prompt
-from retrieval import (
+from rag_llmops.llm import generate_text
+from rag_llmops.prompts import ESCAPE_PHRASE, build_prompt
+from rag_llmops.retrieval import (
     load_retriever,
     retrieve,
     load_index,

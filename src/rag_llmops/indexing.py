@@ -1,6 +1,6 @@
 
 from pathlib import Path
-from config import load_config
+from rag_llmops.config import load_config
 from qdrant_client import QdrantClient
 from llama_index.core import StorageContext, VectorStoreIndex
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding

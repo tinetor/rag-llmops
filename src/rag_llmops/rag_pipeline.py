@@ -2,10 +2,10 @@
 
 from langfuse import get_client
 
-from config import load_config
-from llm import load_llm
-from retrieval import load_index, load_retriever
-from generation import generate_answer
+from rag_llmops.config import load_config
+from rag_llmops.llm import load_llm
+from rag_llmops.retrieval import load_index, load_retriever
+from rag_llmops.generation import generate_answer
 
 
 def run_rag(question: str, config_path="configs/config.yaml") -> dict:

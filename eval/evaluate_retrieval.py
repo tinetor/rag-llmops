@@ -1,19 +1,12 @@
 """Evaluate article retrieval using a Langfuse dataset experiment."""
 
 import argparse
-import sys
-from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-SRC = ROOT / "src"
-
-if str(SRC) not in sys.path:
-    sys.path.insert(0, str(SRC))
 
 from langfuse import get_client
 from metrics import article_hit_evaluator, article_recall_evaluator
-from config import load_config
-from retrieval import (
+from rag_llmops.config import load_config
+from rag_llmops.retrieval import (
     load_retriever,
     retrieve,
     load_index,

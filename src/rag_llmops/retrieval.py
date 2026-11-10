@@ -1,15 +1,11 @@
 import argparse
 import json
-import sys
 from functools import lru_cache
-from pathlib import Path
 
 from qdrant_client import QdrantClient, models
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
 
-from config import load_config
+from rag_llmops.config import load_config
 
 from llama_index.core import Settings, VectorStoreIndex
 from llama_index.core.llms import MockLLM
