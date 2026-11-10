@@ -8,6 +8,38 @@ version = "0.1.0"
 description = "RAG pipeline over the EU AI Act"
 requires-python = ">=3.11"
 
+# Base: what the API and the ingestion job need when models are served
+# remotely (vLLM for the LLM, TEI for embeddings). This is the Docker image.
+dependencies = [
+  "fastapi",
+  "uvicorn[standard]",
+  "pyyaml",
+  "langfuse",
+  "openai",                                            # client for vLLM
+  "qdrant-client",
+  "llama-index-core",
+  "llama-index-readers-file",
+  "pypdf",
+  "llama-index-retrievers-bm25",
+  "llama-index-vector-stores-qdrant",
+  "llama-index-embeddings-text-embeddings-inference",  # client for TEI
+  "nltk==3.9.3",                                       # kept pinned as before
+]
+
+[project.optional-dependencies]
+# Local: run the models in-process (backend: hf), e.g. in Colab.
+local = [
+  "torch",
+  "transformers",
+  "accelerate",
+  "sentence-transformers",
+  "llama-index-embeddings-huggingface",
+]
+dev = [
+  "pytest",
+  "httpx",                                             # FastAPI TestClient
+]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
