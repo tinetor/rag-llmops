@@ -53,3 +53,41 @@ def test_embedding_dimension_matches_model(index, config):
     )
 
     assert stored_dimension == expected_dimension
+
+
+def test_reingestion_replaces_collection(tmp_path, config):
+    """Running ingestion twice must not duplicate chunks."""
+    kwargs = dict(
+        nodes=SAMPLE_NODES,
+        model_name=config["embedding"]["model_name"],
+        persist_dir=str(tmp_path / "qdrant"),
+        collection_name="test_collection",
+    )
+
+    # Close the first client: local Qdrant allows one client per folder.
+    build_index(**kwargs).vector_store.client.close()
+    index = build_index(**kwargs)
+
+    stored_count = index.vector_store.client.count(
+        collection_name="test_collection"
+    ).count
+    assert stored_count == len(SAMPLE_NODES)
+
+
+def test_reingestion_replaces_collection(tmp_path, config):
+    """Running ingestion twice must not duplicate chunks."""
+    kwargs = dict(
+        nodes=SAMPLE_NODES,
+        model_name=config["embedding"]["model_name"],
+        persist_dir=str(tmp_path / "qdrant"),
+        collection_name="test_collection",
+    )
+
+    # Close the first client: local Qdrant allows one client per folder.
+    build_index(**kwargs).vector_store.client.close()
+    index = build_index(**kwargs)
+
+    stored_count = index.vector_store.client.count(
+        collection_name="test_collection"
+    ).count
+    assert stored_count == len(SAMPLE_NODES)

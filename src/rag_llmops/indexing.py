@@ -23,6 +23,11 @@ def build_index(
 
     client = QdrantClient(path=persist_dir)
 
+    # Ingestion is a full rebuild: drop the existing collection so that
+    # re-running ingestion never appends a second copy of every chunk.
+    if client.collection_exists(collection_name):
+        client.delete_collection(collection_name)
+
     vector_store = QdrantVectorStore(
         client=client,
         collection_name=collection_name,
