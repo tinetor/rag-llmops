@@ -7,7 +7,10 @@ chunking:
   strategy: "article"
 
 embedding:
+  backend: hf              # hf: in-process | tei: Text Embeddings Inference server
   model_name: BAAI/bge-base-en-v1.5
+  base_url: http://localhost:8081   # used only by the tei backend
+  timeout: 60
 
 retrieval:
   top_k: 8

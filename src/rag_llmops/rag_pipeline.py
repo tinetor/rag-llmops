@@ -3,6 +3,7 @@
 from langfuse import get_client as get_langfuse_client
 
 from rag_llmops.config import load_config
+from rag_llmops.embeddings import load_embedding_model
 from rag_llmops.generation import generate_answer
 from rag_llmops.llm import load_llm
 from rag_llmops.retrieval import get_client as get_qdrant_client
@@ -26,13 +27,13 @@ def load_components(config_path="configs/config.yaml") -> dict:
         index = load_index(
             persist_dir=persist_dir,
             collection_name=config["index"]["collection_name"],
-            model_name=config["embedding"]["model_name"],
+            embed_model=load_embedding_model(config["embedding"]),
         )
     else:
         retriever = load_retriever(
             persist_dir=persist_dir,
             collection_name=config["index"]["collection_name"],
-            model_name=config["embedding"]["model_name"],
+            embed_model=load_embedding_model(config["embedding"]),
             k=retrieval["top_k"],
             mode=retrieval["mode"],
             candidate_k=retrieval["candidate_k"],

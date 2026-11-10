@@ -6,6 +6,7 @@ from qdrant_client import QdrantClient, models
 
 
 from rag_llmops.config import load_config
+from rag_llmops.embeddings import load_embedding_model
 
 from llama_index.core import Settings, VectorStoreIndex
 from llama_index.core.llms import MockLLM
@@ -16,7 +17,6 @@ from llama_index.core.vector_stores import (
     MetadataFilter,
     MetadataFilters,
 )
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.retrievers.bm25 import BM25Retriever
 from llama_index.vector_stores.qdrant import QdrantVectorStore
 
@@ -34,11 +34,10 @@ def get_client(persist_dir: str) -> QdrantClient:
 def load_index(
     persist_dir: str,
     collection_name: str,
-    model_name: str,
+    embed_model,
 ) -> VectorStoreIndex:
     """Load the existing Qdrant collection as a LlamaIndex index."""
     Settings.llm = MockLLM()
-    embed_model = HuggingFaceEmbedding(model_name=model_name)
 
     vector_store = QdrantVectorStore(
         client=get_client(persist_dir),
@@ -230,7 +229,7 @@ def build_retriever(
 def load_retriever(
     persist_dir: str,
     collection_name: str,
-    model_name: str,
+    embed_model,
     k: int,
     mode: str,
     candidate_k: int,
@@ -245,7 +244,7 @@ def load_retriever(
     index = load_index(
         persist_dir=persist_dir,
         collection_name=collection_name,
-        model_name=model_name,
+        embed_model=embed_model,
     )
 
     return build_retriever(
@@ -361,7 +360,7 @@ def main():
         index = load_index(
             persist_dir=persist_dir,
             collection_name=collection_name,
-            model_name=config["embedding"]["model_name"],
+            embed_model=load_embedding_model(config["embedding"]),
         )
 
         if args.route:

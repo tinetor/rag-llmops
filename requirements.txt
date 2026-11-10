@@ -16,3 +16,4 @@ openai
 fastapi
 uvicorn[standard]
 httpx
+llama-index-embeddings-text-embeddings-inference

@@ -18,6 +18,7 @@ def test_components_load_once_and_config_is_forwarded(monkeypatch):
         calls.append(kwargs)
         return {"answer": "ok", "escaped": False, "sources": []}
 
+    monkeypatch.setattr(rag_pipeline, "load_embedding_model", lambda cfg: "embed")
     monkeypatch.setattr(rag_pipeline, "load_index", lambda **kwargs: "index")
     monkeypatch.setattr(rag_pipeline, "load_retriever", lambda **kwargs: "retriever")
     monkeypatch.setattr(rag_pipeline, "load_llm", fake_load_llm)

@@ -6,6 +6,7 @@ import argparse
 from langfuse import get_client
 from metrics import article_hit_evaluator, article_recall_evaluator
 from rag_llmops.config import load_config
+from rag_llmops.embeddings import load_embedding_model
 from rag_llmops.generation import generate_answer
 from rag_llmops.llm import load_llm
 from rag_llmops.retrieval import (
@@ -140,7 +141,7 @@ def main():
             index = load_index(
                 persist_dir=persist_dir,
                 collection_name=collection_name,
-                model_name=config["embedding"]["model_name"],
+                embed_model=load_embedding_model(config["embedding"]),
             )
             qdrant_client = get_qdrant_client(persist_dir)
             retriever = None
@@ -149,7 +150,7 @@ def main():
             retriever = load_retriever(
                 persist_dir=persist_dir,
                 collection_name=collection_name,
-                model_name=config["embedding"]["model_name"],
+                embed_model=load_embedding_model(config["embedding"]),
                 k=top_k,
                 mode=mode,
                 candidate_k=candidate_k,
