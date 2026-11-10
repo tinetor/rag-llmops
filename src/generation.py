@@ -17,7 +17,7 @@ def generate_answer(
     model,
     tokenizer,
     max_new_tokens: int,
-    backend: str = \"hf\",
+    backend: str = "hf",
     model_name: str = None,
     use_router: bool = False,
     index=None,

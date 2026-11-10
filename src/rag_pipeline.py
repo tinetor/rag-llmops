@@ -50,6 +50,7 @@ def run_rag(question: str, config_path="configs/config.yaml") -> dict:
         model=model,
         tokenizer=tokenizer,
         max_new_tokens=config["generation"]["max_new_tokens"],
+        top_k=top_k,
         backend=config["generation"].get("backend", "hf"),
         model_name=config["generation"]["model_name"],
         use_router=use_router,
