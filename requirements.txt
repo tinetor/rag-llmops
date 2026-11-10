@@ -13,3 +13,4 @@ llama_index.embeddings.huggingface
 llama_index.vector_stores.faiss
 langfuse
 llama_index.vector_stores.qdrant
+nltk==3.9.3
