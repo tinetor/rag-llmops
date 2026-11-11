@@ -1,0 +1,14 @@
+# Overrides applied on top of config.yaml inside Docker Compose, through
+# RAG_CONFIG_OVERLAY=configs/config.docker.yaml. Only what differs is here:
+# models and vectors are served by other containers, reached by service name.
+
+embedding:
+  backend: tei
+  base_url: http://tei:80
+
+index:
+  url: http://qdrant:6333
+
+generation:
+  backend: http
+  base_url: http://llm:8000/v1

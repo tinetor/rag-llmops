@@ -6,6 +6,7 @@ import argparse
 from langfuse import get_client
 from metrics import article_hit_evaluator, article_recall_evaluator
 from rag_llmops.config import load_config
+from rag_llmops.retrieval import resolve_qdrant_location
 from rag_llmops.embeddings import load_embedding_model
 from rag_llmops.generation import generate_answer
 from rag_llmops.llm import load_llm
@@ -91,7 +92,7 @@ def main():
         retrieval_config = config["retrieval"]
 
         # Use the same Qdrant path as evaluate_retrieval.py.
-        persist_dir = config["index"]["persist_dir"] + "_qdrant"
+        qdrant_location = resolve_qdrant_location(config["index"])
         collection_name = config["index"]["collection_name"]
 
         mode = retrieval_config["mode"]
@@ -139,16 +140,16 @@ def main():
 
         if args.route:
             index = load_index(
-                persist_dir=persist_dir,
+                qdrant_location=qdrant_location,
                 collection_name=collection_name,
                 embed_model=load_embedding_model(config["embedding"]),
             )
-            qdrant_client = get_qdrant_client(persist_dir)
+            qdrant_client = get_qdrant_client(qdrant_location)
             retriever = None
         else:
             index = None
             retriever = load_retriever(
-                persist_dir=persist_dir,
+                qdrant_location=qdrant_location,
                 collection_name=collection_name,
                 embed_model=load_embedding_model(config["embedding"]),
                 k=top_k,
@@ -170,7 +171,7 @@ def main():
 
                 retriever_kwargs = {
                     "index": index,
-                    "persist_dir": persist_dir,
+                    "qdrant_location": qdrant_location,
                     "collection_name": collection_name,
                     "k": top_k,
                     "mode": mode,

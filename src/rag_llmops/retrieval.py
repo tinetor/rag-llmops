@@ -1,6 +1,7 @@
 import argparse
 import json
 from functools import lru_cache
+from pathlib import Path
 
 from qdrant_client import QdrantClient, models
 
@@ -25,14 +26,27 @@ from llama_index.vector_stores.qdrant import QdrantVectorStore
 # Setup
 # ---------------------------------------------------------------------------
 
+def resolve_qdrant_location(index_config: dict) -> str:
+    """Server URL when `index.url` is set (Docker), local folder otherwise."""
+    return index_config.get("url") or index_config["persist_dir"] + "_qdrant"
+
+
+def create_qdrant_client(qdrant_location: str) -> QdrantClient:
+    """Connect to a Qdrant server (http/https URL) or open local storage."""
+    if qdrant_location.startswith(("http://", "https://")):
+        return QdrantClient(url=qdrant_location)
+    Path(qdrant_location).mkdir(parents=True, exist_ok=True)
+    return QdrantClient(path=qdrant_location)
+
+
 @lru_cache(maxsize=None)
-def get_client(persist_dir: str) -> QdrantClient:
-    """Return one shared client per directory."""
-    return QdrantClient(path=persist_dir)
+def get_client(qdrant_location: str) -> QdrantClient:
+    """Return one shared client per Qdrant location."""
+    return create_qdrant_client(qdrant_location)
 
 
 def load_index(
-    persist_dir: str,
+    qdrant_location: str,
     collection_name: str,
     embed_model,
 ) -> VectorStoreIndex:
@@ -40,7 +54,7 @@ def load_index(
     Settings.llm = MockLLM()
 
     vector_store = QdrantVectorStore(
-        client=get_client(persist_dir),
+        client=get_client(qdrant_location),
         collection_name=collection_name,
     )
 
@@ -170,7 +184,7 @@ def load_nodes(
 
 def build_retriever(
     index: VectorStoreIndex,
-    persist_dir: str,
+    qdrant_location: str,
     collection_name: str,
     k: int,
     mode: str,
@@ -191,7 +205,7 @@ def build_retriever(
         )
 
     nodes = load_nodes(
-        get_client(persist_dir),
+        get_client(qdrant_location),
         collection_name,
         chapters,
     )
@@ -227,7 +241,7 @@ def build_retriever(
 # ---------------------------------------------------------------------------
 
 def load_retriever(
-    persist_dir: str,
+    qdrant_location: str,
     collection_name: str,
     embed_model,
     k: int,
@@ -242,14 +256,14 @@ def load_retriever(
     chapter. Automatic routing is handled separately by the CLI.
     """
     index = load_index(
-        persist_dir=persist_dir,
+        qdrant_location=qdrant_location,
         collection_name=collection_name,
         embed_model=embed_model,
     )
 
     return build_retriever(
         index=index,
-        persist_dir=persist_dir,
+        qdrant_location=qdrant_location,
         collection_name=collection_name,
         k=k,
         mode=mode,
@@ -349,7 +363,7 @@ def main():
         else config["retrieval"]["top_k"]
     )
 
-    persist_dir = config["index"]["persist_dir"] + "_qdrant"
+    qdrant_location = resolve_qdrant_location(config["index"])
     collection_name = config["index"]["collection_name"]
 
     routed = None
@@ -358,7 +372,7 @@ def main():
 
     try:
         index = load_index(
-            persist_dir=persist_dir,
+            qdrant_location=qdrant_location,
             collection_name=collection_name,
             embed_model=load_embedding_model(config["embedding"]),
         )
@@ -380,7 +394,7 @@ def main():
 
         retriever = build_retriever(
             index=index,
-            persist_dir=persist_dir,
+            qdrant_location=qdrant_location,
             collection_name=collection_name,
             k=top_k,
             mode=mode,
@@ -391,7 +405,7 @@ def main():
         results = retrieve(retriever,args.query)
 
     finally:
-        client = get_client(persist_dir)
+        client = get_client(qdrant_location)
         client.close()
         get_client.cache_clear()
 

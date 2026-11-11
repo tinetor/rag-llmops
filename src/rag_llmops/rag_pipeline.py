@@ -3,6 +3,7 @@
 from langfuse import get_client as get_langfuse_client
 
 from rag_llmops.config import load_config
+from rag_llmops.retrieval import resolve_qdrant_location
 from rag_llmops.embeddings import load_embedding_model
 from rag_llmops.generation import generate_answer
 from rag_llmops.llm import load_llm
@@ -17,7 +18,7 @@ def load_components(config_path="configs/config.yaml") -> dict:
     """
     config = load_config(config_path)
     retrieval = config["retrieval"]
-    persist_dir = config["index"]["persist_dir"] + "_qdrant"
+    qdrant_location = resolve_qdrant_location(config["index"])
 
     index = None
     retriever = None
@@ -25,13 +26,13 @@ def load_components(config_path="configs/config.yaml") -> dict:
         # The router builds a filtered retriever per question,
         # so only the index is loaded up front.
         index = load_index(
-            persist_dir=persist_dir,
+            qdrant_location=qdrant_location,
             collection_name=config["index"]["collection_name"],
             embed_model=load_embedding_model(config["embedding"]),
         )
     else:
         retriever = load_retriever(
-            persist_dir=persist_dir,
+            qdrant_location=qdrant_location,
             collection_name=config["index"]["collection_name"],
             embed_model=load_embedding_model(config["embedding"]),
             k=retrieval["top_k"],
@@ -66,7 +67,7 @@ def answer(components: dict, question: str) -> dict:
         model_name=generation["model_name"],
         use_router=retrieval.get("use_router", False),
         index=components["index"],
-        persist_dir=config["index"]["persist_dir"] + "_qdrant",
+        qdrant_location=resolve_qdrant_location(config["index"]),
         collection_name=config["index"]["collection_name"],
         embedding_model_name=config["embedding"]["model_name"],
         top_chapters=retrieval.get("top_chapters", 2),
@@ -90,8 +91,8 @@ def close_components(components: dict) -> None:
         components["model"].close()
 
     # Qdrant client is cached per storage path; close it and drop the cache.
-    persist_dir = config["index"]["persist_dir"] + "_qdrant"
-    get_qdrant_client(persist_dir).close()
+    qdrant_location = resolve_qdrant_location(config["index"])
+    get_qdrant_client(qdrant_location).close()
     get_qdrant_client.cache_clear()
 
     # Send any pending traces and stop Langfuse background workers.

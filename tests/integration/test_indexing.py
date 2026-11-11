@@ -26,7 +26,7 @@ def index(tmp_path, embed_model):
     return build_index(
         nodes=SAMPLE_NODES,
         embed_model=embed_model,
-        persist_dir=str(tmp_path / "qdrant"),
+        qdrant_location=str(tmp_path / "qdrant"),
         collection_name="test_collection",
     )
 
@@ -57,7 +57,7 @@ def test_reingestion_replaces_collection(tmp_path, embed_model):
     kwargs = dict(
         nodes=SAMPLE_NODES,
         embed_model=embed_model,
-        persist_dir=str(tmp_path / "qdrant"),
+        qdrant_location=str(tmp_path / "qdrant"),
         collection_name="test_collection",
     )
 

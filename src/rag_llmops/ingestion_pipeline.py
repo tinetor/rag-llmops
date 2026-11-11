@@ -1,6 +1,7 @@
 """Orchestrate the document ingestion pipeline."""
 
 from rag_llmops.config import load_config
+from rag_llmops.retrieval import resolve_qdrant_location
 from rag_llmops.embeddings import load_embedding_model
 from rag_llmops.load_pdf import load_pdf
 from rag_llmops.chunking import chunking
@@ -23,7 +24,7 @@ def run_ingestion(config_path="configs/config.yaml"):
     index = build_index(
         nodes,
         embed_model=load_embedding_model(config["embedding"]),
-        persist_dir=config["index"]["persist_dir"] + "_qdrant",
+        qdrant_location=resolve_qdrant_location(config["index"]),
         collection_name=config["index"]["collection_name"],
     )
 

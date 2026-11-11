@@ -21,7 +21,7 @@ def generate_answer(
     model_name: str = None,
     use_router: bool = False,
     index=None,
-    persist_dir: str = None,
+    qdrant_location: str = None,
     collection_name: str = None,
     embedding_model_name: str = None,
     top_k: int = 5,
@@ -75,7 +75,7 @@ def generate_answer(
             # Build retriever using the configured top_k
             retriever_kwargs = {
                 "index": index,
-                "persist_dir": persist_dir,
+                "qdrant_location": qdrant_location,
                 "collection_name": collection_name,
                 "k": top_k,
                 "mode": retrieval_mode,
