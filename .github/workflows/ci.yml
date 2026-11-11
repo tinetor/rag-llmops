@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  unit-tests:
+    name: Unit tests (base dependencies only)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install the package with test tools
+        run: pip install -e ".[dev]"
+
+      - name: Run unit tests
+        run: pytest tests/unit -v
+
+  docker-image:
+    name: Build and check the Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build the image (layers cached between runs)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: rag-llmops:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test - the app imports inside the image
+        run: docker run --rm rag-llmops:ci python -c "import rag_llmops.api"
+
+      - name: Image size budget (1 GB uncompressed)
+        run: |
+          size=$(docker image inspect rag-llmops:ci --format '{{.Size}}')
+          echo "Image size: $((size / 1024 / 1024)) MB"
+          test "$size" -le 1000000000
