@@ -52,9 +52,20 @@ def load_index(
 ) -> VectorStoreIndex:
     """Load the existing Qdrant collection as a LlamaIndex index."""
     Settings.llm = MockLLM()
+    client = get_client(qdrant_location)
+
+    # The Qdrant vector store detects the collection's vector format when it is
+    # created. Built before the collection exists, it guesses a format that may
+    # not match what ingestion writes, and every query then fails. Fail fast
+    # instead: the orchestrator restarts the app until ingestion has run.
+    if not client.collection_exists(collection_name):
+        raise RuntimeError(
+            f"Qdrant collection '{collection_name}' not found at "
+            f"{qdrant_location}. Run the ingestion job first."
+        )
 
     vector_store = QdrantVectorStore(
-        client=get_client(qdrant_location),
+        client=client,
         collection_name=collection_name,
     )
 

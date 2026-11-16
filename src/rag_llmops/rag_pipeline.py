@@ -82,6 +82,16 @@ def answer(components: dict, question: str) -> dict:
     return result
 
 
+def is_ready(components: dict) -> bool:
+    """True when the Qdrant collection is reachable (False during re-ingestion)."""
+    index_config = components["config"]["index"]
+    try:
+        client = get_qdrant_client(resolve_qdrant_location(index_config))
+        return client.collection_exists(index_config["collection_name"])
+    except Exception:
+        return False
+
+
 def close_components(components: dict) -> None:
     """Release shared clients on shutdown. Safe to call once at exit."""
     config = components["config"]

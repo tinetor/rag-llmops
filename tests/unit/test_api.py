@@ -74,3 +74,13 @@ def test_components_are_closed_on_shutdown(monkeypatch):
     with TestClient(api.app):
         assert closed == []
     assert closed == ["components"]
+
+
+def test_ready_when_collection_exists(client, monkeypatch):
+    monkeypatch.setattr(api, "is_ready", lambda components: True)
+    assert client.get("/ready").status_code == 200
+
+
+def test_not_ready_without_collection(client, monkeypatch):
+    monkeypatch.setattr(api, "is_ready", lambda components: False)
+    assert client.get("/ready").status_code == 503
