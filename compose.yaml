@@ -9,7 +9,7 @@ name: rag-llmops
 
 x-app: &app
   build: .
-  image: rag-llmops:local
+  image: ghcr.io/tinetor/rag-llmops:${APP_TAG:-latest}
   environment:
     RAG_CONFIG_OVERLAY: configs/config.docker.yaml
     LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}

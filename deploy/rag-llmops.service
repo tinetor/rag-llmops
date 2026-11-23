@@ -1,0 +1,20 @@
+# Starts the RAG stack when the instance boots.
+# Install: sudo cp deploy/rag-llmops.service /etc/systemd/system/
+#          sudo systemctl daemon-reload && sudo systemctl enable rag-llmops
+[Unit]
+Description=RAG stack (Docker Compose)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=ec2-user
+WorkingDirectory=/home/ec2-user/rag-llmops
+ExecStart=/home/ec2-user/rag-llmops/scripts/deploy.sh
+ExecStop=/usr/bin/docker compose --profile cpu stop
+TimeoutStartSec=900
+
+[Install]
+WantedBy=multi-user.target
