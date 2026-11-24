@@ -27,6 +27,27 @@ jobs:
       - name: Run unit tests
         run: pytest tests/unit -v
 
+  ui-tests:
+    name: UI tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: frontend/requirements.txt
+
+      - name: Install the UI dependencies
+        run: pip install -r requirements.txt pytest
+
+      - name: Run UI tests
+        run: pytest -v
+
   docker-image:
     name: Build and check the Docker image
     runs-on: ubuntu-latest
@@ -53,9 +74,21 @@ jobs:
           echo "Image size: $((size / 1024 / 1024)) MB"
           test "$size" -le 1000000000
 
+      - name: Build the UI image
+        uses: docker/build-push-action@v7
+        with:
+          context: frontend
+          load: true
+          tags: rag-llmops-ui:ci
+          cache-from: type=gha,scope=ui
+          cache-to: type=gha,scope=ui,mode=max
+
+      - name: Smoke test - the UI module imports inside its image
+        run: docker run --rm rag-llmops-ui:ci python -c "import app"
+
   publish:
     name: Publish the image to GHCR
-    needs: [unit-tests, docker-image]
+    needs: [unit-tests, ui-tests, docker-image]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
@@ -79,3 +112,14 @@ jobs:
             ghcr.io/${{ github.repository }}:latest
           labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           cache-from: type=gha
+
+      - name: Build and push the UI image, tagged with the commit
+        uses: docker/build-push-action@v7
+        with:
+          context: frontend
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}-ui:${{ github.sha }}
+            ghcr.io/${{ github.repository }}-ui:latest
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha,scope=ui
