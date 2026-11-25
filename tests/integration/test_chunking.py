@@ -11,7 +11,7 @@ def test_chunks_fit_embedding_window():
     docs = load_pdf(config["data"]["pdf_path"])
     chunks = chunking(
         docs,
-        max_chars=config["chunking"]["max_chars"],
+        chunk_size=config["chunking"]["chunk_size"],
         overlap_ratio=config["chunking"]["overlap_ratio"],
     )
     sizes = [len(model.tokenizer(c.text)["input_ids"]) for c in chunks]

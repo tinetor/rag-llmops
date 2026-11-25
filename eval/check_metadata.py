@@ -97,7 +97,7 @@ def main():
 
         chunks = chunking(
             docs,
-            max_chars=config["chunking"]["max_chars"],
+            chunk_size=config["chunking"]["chunk_size"],
             overlap_ratio=config["chunking"]["overlap_ratio"],
             strategy=strategy,
         )

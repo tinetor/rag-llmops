@@ -2,7 +2,7 @@ data:
   pdf_path: data/ai_act.pdf
 
 chunking:
-  max_chars: 180
+  chunk_size: 180
   overlap_ratio: 0.1
   strategy: "article"
 

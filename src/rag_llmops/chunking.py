@@ -277,7 +277,7 @@ def _split_by_article(
 
 def chunking(
     raw_text: list,
-    max_chars: int = 1500,
+    chunk_size: int = 1500,
     overlap_ratio: float = 0.1,
     strategy: str = "sentence",
 ) -> list:
@@ -285,20 +285,20 @@ def chunking(
     if not 0 <= overlap_ratio < 1:
         raise ValueError("overlap_ratio must be between 0 and 1.")
 
-    if max_chars <= 0:
-        raise ValueError("max_chars must be greater than 0.")
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be greater than 0.")
 
     if strategy == "sentence":
         return _split_by_sentence(
             raw_text,
-            chunk_size=max_chars,
+            chunk_size=chunk_size,
             overlap_ratio=overlap_ratio,
         )
 
     if strategy == "article":
         return _split_by_article(
             raw_text,
-            chunk_size=max_chars,
+            chunk_size=chunk_size,
             overlap_ratio=overlap_ratio,
         )
 
@@ -315,7 +315,7 @@ if __name__ == "__main__":
     for strategy in ("sentence", "article"):
         chunks = chunking(
             docs,
-            max_chars=config["chunking"]["max_chars"],
+            chunk_size=config["chunking"]["chunk_size"],
             overlap_ratio=config["chunking"]["overlap_ratio"],
             strategy=strategy,
         )

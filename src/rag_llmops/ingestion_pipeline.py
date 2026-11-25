@@ -16,7 +16,7 @@ def run_ingestion(config_path="configs/config.yaml"):
 
     nodes = chunking(
         documents,
-        max_chars=config["chunking"]["max_chars"],
+        chunk_size=config["chunking"]["chunk_size"],
         overlap_ratio=config["chunking"]["overlap_ratio"],
         strategy=config["chunking"]["strategy"],
     )
