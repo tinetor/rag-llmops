@@ -15,7 +15,7 @@ x-app: &app
     LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
     LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
     LANGFUSE_BASE_URL: ${LANGFUSE_BASE_URL:-https://cloud.langfuse.com}
-
+    LANGFUSE_TRACING_ENVIRONMENT: ${LANGFUSE_TRACING_ENVIRONMENT:-production}
 services:
   qdrant:
     image: qdrant/qdrant:v1.20.0
