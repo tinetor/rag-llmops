@@ -74,7 +74,7 @@ flowchart LR
 3. **Generation.** The prompt separates the instructions, the passages and the question, escapes them, and tells the model to treat passages as data, cite articles and use the escape phrase `Not covered in the provided material.` when the passages do not answer the question.
 4. **Response.** The API returns the answer, a flag saying whether the model escaped, and the passages it used with their article, chapter and score.
 
-Scope of v1: the index covers the recitals and the articles of the regulation. With chapter routing on (the default), answers come from the articles. Indexing the annexes is on the roadmap.
+Scope of v1: questions in English, answered from the articles of the regulation. Indexing the annexes is on the roadmap.
 
 ## Measured numbers
 
@@ -155,7 +155,7 @@ flowchart LR
 | Decision | Why | Trade-off |
 |---|---|---|
 | Chunks never cross an article boundary | The article is the legal and thematic unit of the regulation. Keeping it intact avoids separating an obligation from its condition or exception, and lets every passage be cited. | Articles vary a lot in length, so long articles are still split by size. |
-| `BAAI/bge-base-en-v1.5` embeddings | Built for retrieval, small enough to run on CPU, and matches the English source text. | Questions in other languages retrieve poorly. Larger or multilingual models are candidates to compare. |
+| `BAAI/bge-base-en-v1.5` embeddings | Built for retrieval, small enough to run on CPU, and matches the English scope of the system. | A baseline choice, not a proven best. Larger models are candidates to compare. |
 | Hybrid retrieval with RRF | Dense search finds paraphrases; BM25 finds exact legal terms and article numbers. RRF combines the two rankings without tuning weights or normalizing scores. | More computation per query. RRF scores are small by construction (about 1/61 at most per ranking with k = 60), so they rank but do not measure relevance. |
 | Chapter router before retrieval | The regulation is organized by subject, so restricting the search to the most relevant chapters reduces noise from unrelated parts. | If the router picks the wrong chapters, the right passage never reaches retrieval. Measured below, with and without routing. |
 | Fixed escape phrase | Gives the model an explicit way out instead of guessing, and the escape rate is a signal that can be monitored in the traces. | An escape means the retrieved context was not enough, not that the regulation does not cover the question. |
@@ -214,7 +214,6 @@ CI runs the unit and UI tests on every push and pull request, plus the image che
 - Run an end-to-end test of the Compose stack in CI.
 - Move the registry to ECR with OIDC federation.
 - Describe the infrastructure with Terraform.
-- Multilingual retrieval, through a multilingual embedding model or query translation.
 
 ## Repository layout
 
